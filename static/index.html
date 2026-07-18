@@ -3,193 +3,916 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Delhi Civic Sense Navigator — Official</title>
+<title>Delhi Civic Sense — 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f5f7fa; color: #1e293b; display: flex; flex-direction: column; min-height: 100vh; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-  /* ---------- Header / Gov-tone ---------- */
-  .gov-header { background: linear-gradient(135deg, #0a2e5c 0%, #134b8a 100%); color: #fff; padding: 0; border-bottom: 3px solid #f5c518; }
-  .gov-header .inner { max-width: 860px; margin: 0 auto; padding: 18px 24px 14px; display: flex; align-items: center; gap: 14px; }
-  .gov-header .emblem { display: flex; align-items: center; gap: 10px; }
-  .gov-header .emblem-icon { font-size: 28px; line-height: 1; }
-  .gov-header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.01em; }
-  .gov-header .subtitle { font-size: 11px; opacity: 0.8; margin-top: 1px; }
+:root {
+  --bg: #07070d;
+  --surface: rgba(255,255,255,0.03);
+  --surface-hover: rgba(255,255,255,0.06);
+  --border: rgba(255,255,255,0.06);
+  --border-active: rgba(99,102,241,0.3);
+  --text: #f1f5f9;
+  --text-secondary: #64748b;
+  --text-muted: #475569;
+  --primary: #6366f1;
+  --primary-light: #818cf8;
+  --primary-dark: #4f46e5;
+  --secondary: #06b6d4;
+  --secondary-light: #22d3ee;
+  --accent: #f59e0b;
+  --accent-light: #fbbf24;
+  --red: #ef4444;
+  --green: #22c55e;
+  --purple: #a855f7;
+  --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.5);
+  --glow-primary: 0 0 30px rgba(99,102,241,0.15);
+  --glow-accent: 0 0 30px rgba(245,158,11,0.15);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
 
-  /* ---------- Top banner ---------- */
-  .banner { background: #eef3fa; border-bottom: 1px solid #cddbe8; padding: 10px 24px; font-size: 12px; color: #2c5282; text-align: center; line-height: 1.5; }
-  .banner strong { font-weight: 600; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  perspective: 1200px;
+}
 
-  /* ---------- Layout ---------- */
-  .container { max-width: 860px; margin: 0 auto; width: 100%; flex: 1; display: flex; flex-direction: column; padding: 16px 24px; gap: 12px; }
-  .chat-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 4px 0; }
+/* ── THREE.JS CANVAS ── */
+#three-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
 
-  /* ---------- Messages ---------- */
-  .message { max-width: 88%; padding: 0; border-radius: 10px; line-height: 1.6; font-size: 14px; }
-  .user-msg { background: #0a2e5c; color: #fff; align-self: flex-end; padding: 12px 16px; border-bottom-right-radius: 3px; max-width: 75%; }
-  .bot-msg { background: #fff; color: #1e293b; align-self: flex-start; border-bottom-left-radius: 3px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); width: 100%; padding: 18px 20px; }
+/* ── NOISE OVERLAY ── */
+.noise {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
 
-  /* ---------- Confidence badge ---------- */
-  .confidence-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 4px; margin-bottom: 12px; }
-  .confidence-high { background: #e6f7e6; color: #1e7e34; border: 1px solid #b8e0b8; }
-  .confidence-low { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-  .confidence-high::before { content: "\2713"; font-weight: 700; }
-  .confidence-low::before { content: "\26A0"; font-weight: 700; }
+/* ── VIGNETTE ── */
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(7,7,13,0.8) 100%);
+}
 
-  /* ---------- Reformulation note ---------- */
-  .reform-note { background: #f0f4ff; border: 1px solid #bfd4f5; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #1e40af; display: flex; align-items: flex-start; gap: 8px; }
-  .reform-note .icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
-  .reform-note .reform-query { font-weight: 600; font-style: italic; }
+/* ── HEADER ── */
+.gov-header {
+  position: relative;
+  z-index: 10;
+  background: rgba(7,7,13,0.7);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 40px rgba(0,0,0,0.5);
+}
+.gov-header .inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gov-header .left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.gov-header .emblem {
+  width: 40px; height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: var(--accent);
+  filter: drop-shadow(0 0 12px rgba(245,158,11,0.3));
+  background: rgba(245,158,11,0.08);
+  border-radius: 10px;
+  border: 1px solid rgba(245,158,11,0.15);
+  transition: all 0.3s;
+}
+.gov-header .emblem:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(245,158,11,0.15);
+}
+.gov-header .title-group h1 {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #fff 50%, var(--primary-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gov-header .title-group .subtitle {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  -webkit-text-fill-color: var(--text-secondary);
+}
+.gov-header .status-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.gov-header .live-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--green);
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.15);
+  padding: 4px 14px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+.gov-header .live-pill .pulse-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulseDot 2s ease-in-out infinite;
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+}
 
-  /* ---------- Live data badge ---------- */
-  .live-data-card { background: #fff1f0; border: 1px solid #ffb8b8; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
-  .live-badge { display: inline-flex; align-items: center; gap: 6px; background: #dc2626; color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 10px; border-radius: 3px; margin-bottom: 8px; text-transform: uppercase; }
-  .live-badge .dot { width: 6px; height: 6px; background: #fff; border-radius: 50%; animation: live-pulse 1.5s infinite; }
-  @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-  .live-data-card .row { margin: 3px 0; font-size: 13px; }
-  .live-data-card .row b { color: #991b1b; }
-  .live-data-card .aqi-value { font-size: 26px; font-weight: 700; color: #dc2626; line-height: 1.2; }
-  .live-data-card .aqi-label { font-size: 11px; color: #64748b; }
+/* ── BANNER ── */
+.banner {
+  position: relative;
+  z-index: 10;
+  background: linear-gradient(90deg, rgba(99,102,241,0.04), rgba(6,182,212,0.04), rgba(245,158,11,0.04));
+  border-bottom: 1px solid var(--border);
+  padding: 9px 28px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.banner strong { color: var(--primary-light); font-weight: 600; }
+.banner a { color: var(--secondary); text-decoration: none; }
+.banner a:hover { text-decoration: underline; }
 
-  /* ---------- Authority card ---------- */
-  .authority-card { background: #f0f7ff; border: 1px solid #b8d4f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
-  .authority-card .badge { display: inline-block; background: #0a2e5c; color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 10px; border-radius: 3px; margin-bottom: 8px; text-transform: uppercase; }
-  .authority-card .row { margin: 3px 0; font-size: 13px; }
-  .authority-card .row b { color: #0a2e5c; }
-  .authority-card .row a { color: #1a56db; text-decoration: none; }
-  .authority-card .row a:hover { text-decoration: underline; }
-  .authority-card .source-link { font-size: 11px; color: #64748b; margin-top: 6px; }
+/* ── CONTAINER ── */
+.container {
+  position: relative;
+  z-index: 10;
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 28px 10px;
+  gap: 10px;
+  min-height: calc(100vh - 120px);
+}
 
-  /* ---------- Prose answer ---------- */
-  .answer { font-size: 14px; line-height: 1.7; }
-  .answer sup { color: #1a56db; font-weight: 600; cursor: pointer; font-size: 11px; }
-  .answer p { margin-bottom: 8px; }
-  .answer p:last-child { margin-bottom: 0; }
+/* ── SUGGESTIONS ── */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  animation: fadeUp 0.7s ease-out;
+}
+.suggestions button {
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+}
+.suggestions button:hover {
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.25);
+  color: var(--primary-light);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 4px 20px rgba(99,102,241,0.12);
+}
+.suggestions button:active {
+  transform: translateY(0) scale(0.98);
+}
 
-  /* ---------- Clarifying question ---------- */
-  .clarify-box { background: #fef9e7; border: 1px solid #f0e4a0; border-radius: 8px; padding: 12px 14px; font-size: 14px; color: #7c6a00; }
+/* ── CHAT ── */
+.chat-area {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 0;
+  scroll-behavior: smooth;
+}
+.chat-area::-webkit-scrollbar { width: 3px; }
+.chat-area::-webkit-scrollbar-track { background: transparent; }
+.chat-area::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--primary), var(--secondary));
+  border-radius: 4px;
+}
 
-  /* ---------- Complaint draft ---------- */
-  .draft-box { background: #fafbfc; border: 1.5px solid #cddbe8; border-radius: 8px; padding: 16px; margin-top: 14px; }
-  .draft-box .draft-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; color: #475569; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-  .draft-box .draft-label span { background: #e2e8f0; padding: 1px 7px; border-radius: 3px; font-size: 9px; color: #475569; }
-  .draft-box .draft-body { background: #fff; border: 1px solid #e2e8f0; border-radius: 5px; padding: 12px; font-size: 13px; white-space: pre-wrap; font-family: 'Courier New', monospace; line-height: 1.5; color: #1e293b; }
-  .draft-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  .draft-actions button { font-size: 12px; font-weight: 500; padding: 7px 16px; border-radius: 5px; cursor: pointer; border: none; transition: background 0.15s; }
-  .btn-copy { background: #e2e8f0; color: #1e293b; }
-  .btn-copy:hover { background: #cbd5e1; }
-  .btn-submit-draft { background: #cbd5e1; color: #64748b; cursor: not-allowed; }
-  .btn-submit-draft::after { content: " (draft — not a real submission)"; font-size: 9px; font-weight: 400; }
+/* ── MESSAGE ENTRY ── */
+.message {
+  max-width: 92%;
+  animation: msgEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+@keyframes msgEnter {
+  0% { opacity: 0; transform: translateY(30px) rotateX(-6deg) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) rotateX(0) scale(1); }
+}
 
-  /* ---------- Why this answer ---------- */
-  .why-toggle { margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
-  .why-toggle summary { cursor: pointer; font-size: 12px; font-weight: 500; color: #64748b; user-select: none; padding: 2px 0; }
-  .why-toggle summary:hover { color: #0a2e5c; }
-  .why-toggle .why-content { font-size: 12px; color: #475569; margin-top: 6px; padding: 8px 10px; background: #f8fafc; border-radius: 5px; line-height: 1.6; }
-  .why-toggle .why-content .stat { display: inline-block; margin-right: 16px; }
-  .why-toggle .why-content .stat b { color: #0a2e5c; }
-  .why-toggle .why-content .cit-list { margin-top: 4px; list-style: none; }
-  .why-toggle .why-content .cit-list li { margin: 2px 0; }
-  .why-toggle .why-content .cit-list a { color: #1a56db; text-decoration: none; }
-  .why-toggle .why-content .cit-list a:hover { text-decoration: underline; }
+/* ── USER MESSAGE ── */
+.user-msg {
+  background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(99,102,241,0.08));
+  color: #fff;
+  align-self: flex-end;
+  padding: 12px 20px;
+  border-radius: 20px 20px 6px 20px;
+  max-width: 65%;
+  border: 1px solid rgba(99,102,241,0.15);
+  box-shadow: 0 4px 24px rgba(99,102,241,0.08);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
 
-  /* ---------- Citations inline in answer ---------- */
-  .citations-footnote { border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 12px; }
+/* ── BOT MESSAGE ── */
+.bot-msg {
+  background: rgba(255,255,255,0.02);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--border);
+  border-radius: 20px 20px 20px 6px;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.03);
+  align-self: flex-start;
+  width: 100%;
+  padding: 22px 24px;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.bot-msg.tilt-active {
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.04);
+}
 
-  /* ---------- Input ---------- */
-  .input-area { display: flex; gap: 8px; padding: 12px 16px; background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); border: 1px solid #e2e8f0; }
-  .input-area textarea { flex: 1; border: none; outline: none; resize: none; font-size: 14px; padding: 6px 4px; font-family: inherit; min-height: 44px; max-height: 120px; }
-  .input-area button { background: #0a2e5c; color: #fff; border: none; border-radius: 6px; padding: 10px 22px; font-size: 14px; cursor: pointer; font-weight: 500; transition: background 0.2s; white-space: nowrap; }
-  .input-area button:hover { background: #134b8a; }
-  .input-area button:disabled { background: #94a3b8; cursor: not-allowed; }
+/* ── CONFIDENCE BADGE ── */
+.confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 14px;
+  border-radius: 20px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+.confidence-high {
+  background: rgba(34,197,94,0.08);
+  color: #4ade80;
+  border: 1px solid rgba(34,197,94,0.15);
+  box-shadow: 0 0 20px rgba(34,197,94,0.04);
+}
+.confidence-low {
+  background: rgba(245,158,11,0.08);
+  color: #fbbf24;
+  border: 1px solid rgba(245,158,11,0.15);
+}
 
-  /* ---------- Suggestions ---------- */
-  .suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
-  .suggestions button { background: #eef3fa; color: #0a2e5c; border: 1px solid #cddbe8; border-radius: 5px; padding: 5px 12px; font-size: 12px; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
-  .suggestions button:hover { background: #d6e3f2; }
+/* ── REFORM NOTE ── */
+.reform-note {
+  background: rgba(99,102,241,0.04);
+  border: 1px solid rgba(99,102,241,0.1);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  backdrop-filter: blur(8px);
+}
+.reform-note .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; color: var(--secondary); }
+.reform-note .reform-query {
+  color: var(--accent-light);
+  font-weight: 600;
+  font-style: italic;
+}
 
-  /* ---------- Typing ---------- */
-  .typing { display: flex; gap: 5px; align-items: center; padding: 6px 0; }
-  .typing span { width: 7px; height: 7px; background: #94a3b8; border-radius: 50%; animation: pulse 1.3s infinite; }
-  .typing span:nth-child(2) { animation-delay: 0.25s; }
-  .typing span:nth-child(3) { animation-delay: 0.5s; }
-  @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+/* ── LIVE DATA CARD ── */
+.live-data-card {
+  background: linear-gradient(135deg, rgba(239,68,68,0.04), rgba(239,68,68,0.01));
+  border: 1px solid rgba(239,68,68,0.12);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  margin-bottom: 14px;
+  transform-style: preserve-3d;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+.live-data-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg,
+    transparent,
+    rgba(239,68,68,0.03),
+    transparent,
+    rgba(239,68,68,0.03),
+    transparent
+  );
+  animation: rotateBg 8s linear infinite;
+  pointer-events: none;
+}
+@keyframes rotateBg {
+  100% { transform: rotate(360deg); }
+}
+.live-data-card:hover {
+  box-shadow: 0 12px 48px rgba(239,68,68,0.1);
+}
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, var(--red), #dc2626);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 3px 12px;
+  border-radius: 20px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  box-shadow: 0 0 24px rgba(239,68,68,0.25);
+  position: relative;
+  z-index: 1;
+}
+.live-badge .dot {
+  width: 5px; height: 5px;
+  background: #fff;
+  border-radius: 50%;
+  animation: livePulse 1.2s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.2; transform: scale(0.6); }
+}
+.live-data-card .content { position: relative; z-index: 1; }
+.live-data-card .aqi-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.live-data-card .aqi-value {
+  font-size: 44px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #fca5a5, #ef4444);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.live-data-card .aqi-unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.live-data-card .detail-row {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 2px 0;
+}
+.live-data-card .detail-row b { color: var(--text); }
 
-  /* ---------- Footer ---------- */
-  .footer-info { text-align: center; font-size: 11px; color: #94a3b8; padding: 10px 0 6px; }
-  .footer-info a { color: #0a2e5c; text-decoration: none; }
-  .footer-info a:hover { text-decoration: underline; }
+/* ── AUTHORITY CARD ── */
+.authority-card {
+  background: linear-gradient(135deg, rgba(6,182,212,0.04), rgba(99,102,241,0.02));
+  border: 1px solid rgba(6,182,212,0.1);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  transform-style: preserve-3d;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.authority-card:hover { box-shadow: 0 12px 48px rgba(6,182,212,0.06); }
+.authority-card .badge {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(6,182,212,0.1), rgba(99,102,241,0.08));
+  color: var(--secondary-light);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 12px;
+  border-radius: 20px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  border: 1px solid rgba(6,182,212,0.12);
+}
+.authority-card .row { margin: 3px 0; font-size: 12px; color: var(--text-secondary); }
+.authority-card .row b { color: var(--text); }
+.authority-card .row a { color: var(--secondary); text-decoration: none; }
+.authority-card .row a:hover { text-decoration: underline; }
 
-  /* ---------- Mobile ---------- */
-  @media (max-width: 640px) {
-    .gov-header .inner { padding: 14px 16px; }
-    .gov-header h1 { font-size: 15px; }
-    .container { padding: 10px 12px; }
-    .message { max-width: 100%; }
-    .user-msg { max-width: 85%; }
-    .bot-msg { padding: 14px 14px; }
-    .input-area { flex-direction: column; }
-    .input-area button { width: 100%; }
-    .draft-actions { flex-direction: column; }
-    .draft-actions button { width: 100%; }
-  }
+/* ── CLARIFY ── */
+.clarify-box {
+  background: rgba(245,158,11,0.04);
+  border: 1px solid rgba(245,158,11,0.12);
+  border-radius: var(--radius-sm);
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--accent-light);
+  line-height: 1.6;
+}
+
+/* ── ANSWER ── */
+.answer { font-size: 13px; line-height: 1.85; color: rgba(255,255,255,0.85); }
+.answer sup {
+  color: var(--primary-light);
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+  transition: color 0.2s;
+}
+.answer sup:hover { color: var(--secondary); }
+.answer p { margin-bottom: 10px; }
+.answer p:last-child { margin-bottom: 0; }
+.answer strong { color: var(--accent-light); }
+
+/* ── DRAFT ── */
+.draft-box {
+  background: rgba(168,85,247,0.03);
+  border: 1px solid rgba(168,85,247,0.08);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-top: 14px;
+}
+.draft-box .draft-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.draft-box .draft-label .pill {
+  background: rgba(168,85,247,0.1);
+  color: #c084fc;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 8px;
+}
+.draft-box .draft-body {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.7);
+}
+.draft-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.draft-actions button {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+}
+.btn-copy {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn-copy:hover {
+  background: rgba(255,255,255,0.08);
+  transform: translateY(-1px);
+}
+
+/* ── WHY TOGGLE ── */
+.why-toggle { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+.why-toggle summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  user-select: none;
+  padding: 4px 0;
+  transition: all 0.2s;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.why-toggle summary::-webkit-details-marker { display: none; }
+.why-toggle summary .arrow {
+  display: inline-block;
+  font-size: 8px;
+  transition: transform 0.3s;
+  color: var(--primary);
+}
+.why-toggle details[open] summary .arrow { transform: rotate(90deg); }
+.why-toggle summary:hover { color: var(--text-secondary); }
+.why-toggle .why-content {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: rgba(0,0,0,0.2);
+  border-radius: var(--radius-sm);
+  line-height: 1.8;
+  border: 1px solid rgba(255,255,255,0.03);
+}
+.why-toggle .why-content .stat { display: inline-block; margin-right: 20px; }
+.why-toggle .why-content .stat b { color: var(--text-secondary); }
+.why-toggle .why-content .cit-list { margin-top: 4px; list-style: none; }
+.why-toggle .why-content .cit-list li { margin: 2px 0; }
+.why-toggle .why-content .cit-list a { color: var(--primary-light); text-decoration: none; }
+.why-toggle .why-content .cit-list a:hover { text-decoration: underline; }
+
+/* ── INPUT ── */
+.input-area {
+  display: flex;
+  gap: 8px;
+  padding: 4px 4px 4px 18px;
+  background: rgba(255,255,255,0.02);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.input-area:focus-within {
+  border-color: rgba(99,102,241,0.2);
+  box-shadow: 0 4px 32px rgba(99,102,241,0.06), var(--shadow);
+}
+.input-area textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 13px;
+  padding: 10px 4px;
+  font-family: inherit;
+  min-height: 42px;
+  max-height: 110px;
+  background: transparent;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.input-area textarea::placeholder { color: var(--text-muted); font-weight: 400; }
+.input-area button.send {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 28px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  position: relative;
+  overflow: hidden;
+}
+.input-area button.send::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent, rgba(255,255,255,0.08));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.input-area button.send:hover {
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 6px 24px rgba(99,102,241,0.2);
+}
+.input-area button.send:hover::after { opacity: 1; }
+.input-area button.send:active { transform: translateY(0) scale(0.99); }
+.input-area button.send:disabled {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── TYPING ── */
+.typing {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 6px 0;
+}
+.typing .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+.typing .dot:nth-child(2) { animation-delay: 0.2s; }
+.typing .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.2; }
+  40% { transform: translateY(-10px); opacity: 1; }
+}
+
+/* ── FOOTER ── */
+.footer-info {
+  position: relative;
+  z-index: 10;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 6px 0 10px;
+}
+.footer-info a { color: var(--primary-light); text-decoration: none; }
+.footer-info a:hover { text-decoration: underline; }
+
+/* ── UTILITY ── */
+@keyframes fadeUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ── MOBILE ── */
+@media (max-width: 640px) {
+  .gov-header .inner { padding: 12px 16px; }
+  .gov-header .status-group .live-pill .label { display: none; }
+  .gov-header h1 { font-size: 14px; }
+  .container { padding: 10px 12px; }
+  .message { max-width: 100%; }
+  .user-msg { max-width: 85%; font-size: 13px; }
+  .bot-msg { padding: 16px 14px; border-radius: 16px 16px 16px 6px; }
+  .bot-msg:hover { transform: none !important; }
+  .live-data-card:hover { transform: none !important; }
+  .authority-card:hover { transform: none !important; }
+  .input-area { flex-direction: column; padding: 10px; }
+  .input-area textarea { padding: 6px 0; }
+  .input-area button.send { width: 100%; }
+  .draft-actions { flex-direction: column; }
+  .draft-actions button { width: 100%; text-align: center; }
+  .suggestions button { font-size: 10px; padding: 5px 12px; }
+}
 </style>
 </head>
 <body>
 
+<div id="three-canvas"></div>
+<div class="noise"></div>
+<div class="vignette"></div>
+
 <header class="gov-header">
   <div class="inner">
-    <div class="emblem">
-      <span class="emblem-icon">&#9733;</span>
-      <div>
-        <h1>Delhi Civic Sense Navigator</h1>
-        <div class="subtitle">Government of NCT of Delhi — Official Sources + Live Data</div>
+    <div class="left">
+      <div class="emblem">&#10017;</div>
+      <div class="title-group">
+        <h1>Delhi Civic Sense</h1>
+        <div class="subtitle">3D · Live Data · Official Sources</div>
+      </div>
+    </div>
+    <div class="status-group">
+      <div class="live-pill">
+        <span class="pulse-dot"></span>
+        <span class="label">System Online</span>
       </div>
     </div>
   </div>
 </header>
 
 <div class="banner">
-  <strong>Routes by issue type</strong> (garbage, roads, water, streetlights, air pollution, emergencies) using official sources. Does not yet resolve MCD's 12 wards individually — see <a href="/api/sources" target="_blank" style="color:#1a56db;">/api/sources</a> for full source list and known limitations.
+  <strong>Routes by issue type</strong> (garbage, roads, water, streetlights, air pollution, emergencies) using official sources. <a href="/api/sources">Full source list</a>
 </div>
 
 <div class="container">
   <div class="suggestions" id="suggestions">
-    <button onclick="ask('What are the new Solid Waste Management Rules 2026?')">SWM Rules 2026</button>
-    <button onclick="ask('How do I report a pothole or garbage in Delhi?')">Report Issues</button>
-    <button onclick="ask('What helplines exist for water, electricity, and emergencies in Delhi?')">Helplines</button>
-    <button onclick="ask('What is the AQI in Delhi right now?')">Live AQI</button>
-    <button onclick="ask('Tell me about MCD waste management in Delhi')">MCD Waste Mgmt</button>
-    <button onclick="ask('Garbage hasn\'t been collected on my street for 3 days in Rohini, please help me report it')">Report Garbage</button>
+    <button onclick="ask('What are the new Solid Waste Management Rules 2026?')">&#9654; SWM Rules 2026</button>
+    <button onclick="ask('How do I report a pothole or garbage in Delhi?')">&#9654; Report Issues</button>
+    <button onclick="ask('What helplines exist for water, electricity, and emergencies in Delhi?')">&#9654; Helplines</button>
+    <button onclick="ask('What is the AQI in Delhi right now?')">&#9654; Live AQI</button>
+    <button onclick="ask('Tell me about MCD waste management in Delhi')">&#9654; MCD Waste Mgmt</button>
+    <button onclick="ask('Garbage hasn\'t been collected on my street for 3 days in Rohini, please help me report it')">&#9654; Report Garbage</button>
   </div>
 
   <div class="chat-area" id="chatArea">
-    <div class="message bot-msg">
-      <div class="answer">Namaste! I'm the Delhi Civic Sense Navigator. Ask me about waste management, air pollution, helplines, reporting civic issues, or any Delhi civic matter. I answer using official government sources with citations, and can fetch live AQI data in real time.</div>
+    <div class="message bot-msg" data-tilt>
+      <div class="answer">Namaste. I'm the Delhi Civic Sense Navigator. Ask me about waste management, air pollution, helplines, reporting civic issues, or any Delhi civic matter. I answer using official sources with citations and fetch live AQI data in real time.</div>
     </div>
   </div>
 
   <div class="input-area">
-    <textarea id="queryInput" placeholder="Type your civic question here..." rows="1" oninput="autoResize(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQuery()}"></textarea>
-    <button id="sendBtn" onclick="sendQuery()">Send</button>
+    <textarea id="queryInput" placeholder="Ask about Delhi civic issues..." rows="1" oninput="autoResize(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQuery()}"></textarea>
+    <button class="send" id="sendBtn" onclick="sendQuery()">Send</button>
   </div>
   <div class="footer-info">
-    Data sourced from MCD, Delhi Government, PIB, DPCC, and other official sources.
-    Live AQI via waqi.info.
+    Data sourced from MCD, Delhi Government, PIB, DPCC, and other official sources. Live AQI via waqi.info.
     <a href="/api/sources">View all sources</a>
   </div>
 </div>
 
 <script>
+// ── THREE.JS 3D BACKGROUND ──
+(function initThree() {
+  const container = document.getElementById('three-canvas');
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(renderer.domElement);
+
+  const group = new THREE.Group();
+  scene.add(group);
+
+  // ── Floating torus knots ──
+  const colors = [0x6366f1, 0x06b6d4, 0xa855f7, 0xf59e0b];
+  const shapes = [];
+  for (let i = 0; i < 8; i++) {
+    const geo = new THREE.TorusKnotGeometry(0.5, 0.15, 64, 8);
+    const mat = new THREE.MeshBasicMaterial({
+      color: colors[i % colors.length],
+      wireframe: true,
+      transparent: true,
+      opacity: 0.15 + Math.random() * 0.15,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(
+      (Math.random() - 0.5) * 14,
+      (Math.random() - 0.5) * 10,
+      (Math.random() - 0.5) * 10 - 5
+    );
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    mesh.scale.setScalar(0.6 + Math.random() * 0.8);
+    mesh.userData = {
+      rotSpeed: { x: (Math.random() - 0.5) * 0.005, y: (Math.random() - 0.5) * 0.008 },
+      floatAmp: 0.3 + Math.random() * 0.5,
+      floatSpeed: 0.3 + Math.random() * 0.5,
+      floatPhase: Math.random() * Math.PI * 2,
+      origY: mesh.position.y,
+    };
+    group.add(mesh);
+    shapes.push(mesh);
+  }
+
+  // ── Small particle field ──
+  const particleCount = 400;
+  const pGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount * 3);
+  const sizes = new Float32Array(particleCount);
+  for (let i = 0; i < particleCount; i++) {
+    positions[i*3] = (Math.random() - 0.5) * 30;
+    positions[i*3+1] = (Math.random() - 0.5) * 20;
+    positions[i*3+2] = (Math.random() - 0.5) * 20 - 5;
+    sizes[i] = 1 + Math.random() * 2;
+  }
+  pGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  pGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  const pMat = new THREE.PointsMaterial({
+    color: 0x6366f1,
+    size: 0.04,
+    transparent: true,
+    opacity: 0.3,
+    blending: THREE.AdditiveBlending,
+  });
+  const particles = new THREE.Points(pGeo, pMat);
+  scene.add(particles);
+
+  camera.position.z = 8;
+
+  // ── Mouse tracking for parallax ──
+  let mouseX = 0, mouseY = 0, targetX = 0, targetY = 0;
+  document.addEventListener('mousemove', (e) => {
+    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+    mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+  });
+
+  function animate() {
+    requestAnimationFrame(animate);
+    targetX += (mouseX - targetX) * 0.02;
+    targetY += (mouseY - targetY) * 0.02;
+
+    group.rotation.x = targetY * 0.05;
+    group.rotation.y = targetX * 0.08;
+
+    const t = Date.now() * 0.001;
+    shapes.forEach((mesh, i) => {
+      mesh.rotation.x += mesh.userData.rotSpeed.x;
+      mesh.rotation.y += mesh.userData.rotSpeed.y;
+      mesh.position.y = mesh.userData.origY + Math.sin(t * mesh.userData.floatSpeed + mesh.userData.floatPhase) * mesh.userData.floatAmp * 0.1;
+    });
+
+    particles.rotation.y += 0.0003;
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+})();
+
+// ── 3D MOUSE TILT ON CARDS ──
+(function initTilt() {
+  const cards = document.querySelectorAll('[data-tilt], .bot-msg, .authority-card, .live-data-card');
+  cards.forEach(card => {
+    card.style.transition = 'transform 0.1s ease-out';
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      const tiltX = (y - 0.5) * -8;
+      const tiltY = (x - 0.5) * 8;
+      card.style.transform = `perspective(800px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) translateZ(6px)`;
+      card.classList.add('tilt-active');
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = 'perspective(800px) rotateX(0) rotateY(0) translateZ(0)';
+      card.classList.remove('tilt-active');
+    });
+  });
+})();
+
+// ── APP LOGIC ──
 function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
 
 function addMessage(text, isUser) {
   const area = document.getElementById('chatArea');
   const div = document.createElement('div');
   div.className = `message ${isUser ? 'user-msg' : 'bot-msg'}`;
+  div.setAttribute('data-tilt', '');
   div.innerHTML = text;
   area.appendChild(div);
   area.scrollTop = area.scrollHeight;
+  // Apply tilt to new card
+  setTimeout(() => {
+    div.addEventListener('mousemove', (e) => {
+      const rect = div.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      div.style.transform = `perspective(800px) rotateX(${(y-0.5)*-8}deg) rotateY(${(x-0.5)*8}deg) translateZ(6px)`;
+      div.classList.add('tilt-active');
+    });
+    div.addEventListener('mouseleave', () => {
+      div.style.transform = 'perspective(800px) rotateX(0) rotateY(0) translateZ(0)';
+      div.classList.remove('tilt-active');
+    });
+  }, 0);
   return div;
 }
 
@@ -198,7 +921,7 @@ function showTyping() {
   const div = document.createElement('div');
   div.className = 'message bot-msg';
   div.id = 'typingIndicator';
-  div.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  div.innerHTML = '<div class="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
   area.appendChild(div);
   area.scrollTop = area.scrollHeight;
 }
@@ -217,78 +940,72 @@ function escapeHtml(s) {
 function addBotMessage(data) {
   let html = '';
 
-  // --- Zone 1: Confidence indicator ---
   if (data.needs_clarification) {
-    html += '<div class="confidence-badge confidence-low">Low confidence — asking instead of guessing</div>';
+    html += '<div class="confidence-badge confidence-low">Low confidence</div>';
   } else {
     html += '<div class="confidence-badge confidence-high">Routed with source</div>';
   }
 
-  // --- Retry note (when reformulation happened) ---
   if (data.used_reformulation && data.reformulated_query) {
     html += `<div class="reform-note">
       <span class="icon">&#8635;</span>
-      <div>First search wasn't specific enough — retried as: <span class="reform-query">${escapeHtml(data.reformulated_query)}</span></div>
+      <div>Refined query: <span class="reform-query">${escapeHtml(data.reformulated_query)}</span></div>
     </div>`;
   }
 
-  // --- Zone 2a: Clarifying question (if low confidence) ---
   if (data.needs_clarification && data.clarifying_question) {
     html += `<div class="clarify-box">${escapeHtml(data.clarifying_question)}</div>`;
   }
 
-  // --- Zone 2b: Live data card (if present) ---
   if (data.live_data) {
     const ld = data.live_data;
-    html += `<div class="live-data-card">
-      <div class="live-badge"><span class="dot"></span>LIVE</div>
-      <div class="row"><span class="aqi-value">${escapeHtml(String(ld.aqi))}</span> <span class="aqi-label">AQI</span></div>
-      <div class="row"><b>Dominant Pollutant:</b> ${escapeHtml(ld.dominant_pollutant || 'N/A')}</div>
-      <div class="row"><b>Station:</b> ${escapeHtml(ld.station || 'N/A')}</div>
-      <div class="row"><b>Reported:</b> ${escapeHtml(ld.timestamp || 'N/A')}</div>
-      <div class="row" style="font-size:11px;color:#64748b;margin-top:4px;">Source: <a href="${ld.source_url}" target="_blank" rel="noopener">waqi.info</a></div>
-    </div>`;
-  }
-
-  // --- Zone 2c: Authority match card ---
-  if (data.authority) {
-    const a = data.authority;
-    html += `<div class="authority-card">
-      <div class="badge">Routed Authority</div>
-      <div class="row"><b>Responsible Authority:</b> ${escapeHtml(a.authority)}</div>
-      <div class="row"><b>How to report:</b> ${escapeHtml(a.channel)}</div>
-      <div class="row"><b>Contact:</b> ${escapeHtml(a.contact)}</div>
-      ${a.portal ? `<div class="row"><b>Portal:</b> <a href="${a.portal}" target="_blank" rel="noopener">${a.portal}</a></div>` : ''}
-      <div class="source-link">Source: <a href="${a.url}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a></div>
-    </div>`;
-  }
-
-  // --- Zone 2d: Prose answer ---
-  const answerHtml = data.answer.replace(/\[(\d+)\]/g, '<sup>$1</sup>');
-  html += `<div class="answer">${answerHtml}</div>`;
-
-  // --- Zone 3: Complaint draft (if present) ---
-  if (data.complaint_draft) {
-    const draftId = 'draft_' + Date.now();
-    html += `<div class="draft-box">
-      <div class="draft-label"><span>DRAFT</span> Complaint ready for submission</div>
-      <div class="draft-body" id="${draftId}">${escapeHtml(data.complaint_draft)}</div>
-      <div class="draft-actions">
-        <button class="btn-copy" onclick="copyDraft('${draftId}', this)">Copy</button>
-        <button class="btn-submit-draft" disabled title="This is a draft for your reference — it is not actually submitted"></button>
+    html += `<div class="live-data-card" data-tilt>
+      <div class="content">
+        <div class="live-badge"><span class="dot"></span>LIVE</div>
+        <div class="aqi-row">
+          <span class="aqi-value">${escapeHtml(String(ld.aqi))}</span>
+          <span class="aqi-unit">AQI</span>
+        </div>
+        <div class="detail-row"><b>Pollutant:</b> ${escapeHtml(ld.dominant_pollutant || 'N/A')}</div>
+        <div class="detail-row"><b>Station:</b> ${escapeHtml(ld.station || 'N/A')}</div>
+        <div class="detail-row"><b>Time:</b> ${escapeHtml(ld.timestamp || 'N/A')}</div>
       </div>
     </div>`;
   }
 
-  // --- Zone 4: Why this answer (expandable) ---
+  if (data.authority) {
+    const a = data.authority;
+    html += `<div class="authority-card" data-tilt>
+      <div class="badge">Routed Authority</div>
+      <div class="row"><b>Authority:</b> ${escapeHtml(a.authority)}</div>
+      <div class="row"><b>How to report:</b> ${escapeHtml(a.channel)}</div>
+      <div class="row"><b>Contact:</b> ${escapeHtml(a.contact)}</div>
+      ${a.portal ? `<div class="row"><b>Portal:</b> <a href="${a.portal}" target="_blank" rel="noopener">${escapeHtml(a.portal)}</a></div>` : ''}
+    </div>`;
+  }
+
+  const answerHtml = data.answer.replace(/\[(\d+)\]/g, '<sup>$1</sup>');
+  html += `<div class="answer">${answerHtml}</div>`;
+
+  if (data.complaint_draft) {
+    const draftId = 'draft_' + Date.now();
+    html += `<div class="draft-box">
+      <div class="draft-label"><span class="pill">DRAFT</span> Complaint ready</div>
+      <div class="draft-body" id="${draftId}">${escapeHtml(data.complaint_draft)}</div>
+      <div class="draft-actions">
+        <button class="btn-copy" onclick="copyDraft('${draftId}', this)">&#x2398; Copy</button>
+      </div>
+    </div>`;
+  }
+
   html += `<div class="why-toggle">
     <details>
-      <summary>Why this answer</summary>
+      <summary><span class="arrow">&#9654;</span> Why this answer</summary>
       <div class="why-content">
-        <span class="stat"><b>Issue type:</b> ${data.issue_type ? escapeHtml(data.issue_type) : '—'}</span>
-        <span class="stat"><b>Chunks retrieved:</b> ${data.chunks_retrieved ?? 0}</span>
-        ${data.used_reformulation ? `<span class="stat"><b>Reformulated:</b> yes</span>` : ''}
-        ${data.live_data ? `<span class="stat"><b>Live data:</b> AQI ${data.live_data.aqi}</span>` : ''}
+        <span class="stat"><b>Type:</b> ${data.issue_type ? escapeHtml(data.issue_type) : '—'}</span>
+        <span class="stat"><b>Chunks:</b> ${data.chunks_retrieved ?? 0}</span>
+        ${data.used_reformulation ? '<span class="stat"><b>Refined:</b> yes</span>' : ''}
+        ${data.live_data ? `<span class="stat"><b>Live:</b> AQI ${data.live_data.aqi}</span>` : ''}
         ${data.citations && data.citations.length > 0 ? `
         <div><b>Citations:</b></div>
         <ul class="cit-list">

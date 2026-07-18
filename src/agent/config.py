@@ -1,4 +1,12 @@
 import os
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    dotenv_path = Path(__file__).parent.parent.parent / ".env"
+    load_dotenv(dotenv_path)
+except ImportError:
+    pass
 
 class Settings:
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
