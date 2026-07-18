@@ -1,11 +1,22 @@
 import json
 import logging
+import time
 
 import httpx
 
 from src.agent.config import settings
 
 logger = logging.getLogger(__name__)
+
+_last_call = 0.0
+
+
+def _rate_limit():
+    global _last_call
+    elapsed = time.time() - _last_call
+    if elapsed < 1.5:
+        time.sleep(1.5 - elapsed)
+    _last_call = time.time()
 
 
 def call_llm(prompt: str, system_prompt: str, model: str | None = None) -> str | None:
@@ -14,6 +25,8 @@ def call_llm(prompt: str, system_prompt: str, model: str | None = None) -> str |
     if not settings.GROQ_API_KEY:
         logger.info("No GROQ_API_KEY set — using deterministic fallback")
         return None
+
+    _rate_limit()
 
     try:
         with httpx.Client(timeout=90.0) as client:
@@ -29,7 +42,7 @@ def call_llm(prompt: str, system_prompt: str, model: str | None = None) -> str |
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt},
                     ],
-                    "temperature": 0.3,
+                    "temperature": 0.7,
                     "max_tokens": 4096,
                 },
             )

@@ -84,26 +84,16 @@ def _get_retriever():
         return None
 
 
-QA_SYSTEM_PROMPT = """You are an AI that answers questions about Delhi civic issues using the provided context. You ONLY extract facts from the context below — you never make up information.
+QA_SYSTEM_PROMPT = """You're a Delhi local who knows the city's civic systems. Answer using only the info below.
 
-INSTRUCTIONS:
-1. Read the retrieved context CAREFULLY. It contains official documents from Delhi Government, MCD, PIB, DPCC, and news sources.
-2. Extract EVERY specific fact, number, name, helpline, date, and rule mentioned in the context that's relevant to the question.
-3. Cite each fact with the corresponding [N] number from the context.
-4. If the context lists helplines — mention ALL of them with their numbers.
-5. If the context describes rules — summarize them using specific details from the context.
-6. Be thorough and specific. List actual phone numbers, dates, department names, URLs.
-7. NEVER say "the context doesn't contain information" — the context DOES contain information, extract it.
+RULES:
+1. Sound like a real person. Short sentences, natural flow. No robotic phrases like "based on the provided context" or "as an AI".
+2. Start with the answer. Use numbers, names, dates from the context. Cite them like [1], [2].
+3. If helplines are mentioned, give the numbers. If rules are mentioned, sum them up plainly.
+4. Never make anything up. If it's not in the context, skip it.
+5. Keep it short — 2-4 paragraphs. No bullet points or markdown.
 
-OUTPUT FORMAT:
-Start directly with your answer. Use inline citations like [1], [2]. End with "Sources:" section.
-
-EXAMPLE OUTPUT:
-The Solid Waste Management Rules 2026 were notified by the Ministry of Environment [1] and will take effect on April 1, 2026 [1]. They replace the 2016 rules [1].
-
-Sources:
-[1] PIB - https://pib.gov.in/PressReleasePage.aspx?PRID=2219676
-"""
+Write like you're telling a neighbour."""
 
 
 def format_context(docs: list[Document]) -> tuple[str, list[dict]]:
@@ -160,17 +150,15 @@ def answer_query(query: str) -> dict:
         context_text, citations = format_context(docs)
         all_citations = citations
 
-        prompt = f"""Answer this Delhi civic question using ONLY the context below.
+        prompt = f"""Someone in Delhi is asking: {query}
 
-QUESTION: {query}
-
-CONTEXT:
+Here's what I found about it:
 {context_text}
 
-CITATIONS:
+Sources:
 {chr(10).join(f'[{c["id"]}] {c["source"]}: {c["url"]}' for c in citations)}
 
-Now write your answer. Extract every specific detail from the context."""
+Answer them directly. Use the info above, cite with [1] [2], keep it conversational."""
     else:
         prompt = ""
         context_text = ""
@@ -205,17 +193,15 @@ Now write your answer. Extract every specific detail from the context."""
             web_citations_text = "\n".join(f'[{c["id"]}] {c["source"]}: {c["url"]}' for c in web_citations)
             all_citations = web_citations
 
-            web_prompt = f"""Answer this Delhi civic question using the web search results below.
+            web_prompt = f"""Someone in Delhi is asking: {query}
 
-QUESTION: {query}
-
-WEB RESULTS:
+I found these from the web:
 {web_context}
 
-CITATIONS:
+Citations:
 {web_citations_text}
 
-Write a helpful answer. Always include specific numbers, names, and URLs."""
+Give them a straightforward answer with the details above. Cite sources as [1], [2]. Keep it natural."""
             web_answer = call_llm(prompt=web_prompt, system_prompt=QA_SYSTEM_PROMPT)
             if web_answer and len(web_answer.strip()) > 50:
                 answer = web_answer.strip()
@@ -224,11 +210,11 @@ Write a helpful answer. Always include specific numbers, names, and URLs."""
                 parts = []
                 for r in web_results[:3]:
                     parts.append(f"{r['title']}: {r['snippet']} ({r['url']})")
-                answer = "Here's what I found from web sources:\n\n" + "\n\n".join(parts)
+                answer = "Came across this online:\n\n" + "\n\n".join(parts)
                 web_results_used = True
 
     if not answer:
-        answer = "I couldn't find information about that. Try asking about waste management, helplines, air pollution, or reporting civic issues in Delhi."
+        answer = "Couldn't find anything on that. Try asking about garbage collection, helplines, pollution, or road repairs in Delhi."
 
     return {
         "answer": answer,

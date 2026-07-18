@@ -148,9 +148,8 @@ def confidence_gate_node(state: AgentState) -> AgentState:
             "confidence": "low",
             "needs_clarification": True,
             "clarifying_question": (
-                "I can only help with Delhi civic issues — waste management, roads, "
-                "water, streetlights, air pollution, and where to report them. "
-                "Could you rephrase your question around one of those?"
+                "Sorry, I can only help with Delhi civic stuff — garbage, roads, "
+                "water, streetlights, pollution, helplines. Mind asking about one of those?"
             ),
             "authority": None,
             "low_confidence_reason": "off_topic",
@@ -164,9 +163,8 @@ def confidence_gate_node(state: AgentState) -> AgentState:
             "confidence": "low",
             "needs_clarification": True,
             "clarifying_question": (
-                "I don't have enough information on that specific topic yet. Could you "
-                "tell me a bit more, or ask about waste management, roads, water, "
-                "streetlights, or air pollution in Delhi?"
+                "Don't have much on that yet. Could you ask about waste management, "
+                "roads, water supply, streetlights, or pollution in Delhi instead?"
             ),
             "authority": None,
             "low_confidence_reason": "insufficient_context",
@@ -258,27 +256,35 @@ def answer_node(state: AgentState) -> AgentState:
     citations = state.get("citations", [])
     live_data = state.get("live_data")
 
-    # Build system prompt dynamically to avoid mentioning "authority match" when none exists
     base_prompt = (
-        "You are the Delhi Civic Sense Navigator, an assistant that answers "
-        "questions about civic issues in Delhi, India, using ONLY the retrieved context "
-        "and any live data provided.\n\n"
-        "Rules:\n"
-        "1. Answer strictly from the retrieved context below. Extract EVERY specific fact, "
-        "number, name, helpline, date, and rule mentioned in the context that's relevant.\n"
-        "2. Cite sources inline using numbered brackets like [1], [2], matching the SOURCES list.\n"
-        "3. Be concise (2-4 short paragraphs). Include helpline numbers/portals when relevant.\n"
-        "4. NEVER say 'the context is insufficient' or 'I don't have enough information' — "
-        "the context DOES contain information, extract it.\n"
+        "You are a Delhi local who knows the city's civic systems inside out. "
+        "You answer questions about Delhi civic issues — waste, roads, water, "
+        "electricity, pollution, helplines — like you're talking to a neighbour.\n\n"
+        "RULES — READ CAREFULLY:\n"
+        "1. SOUND HUMAN. Write like a knowledgeable Delhiite having a conversation. "
+        "Short sentences. Natural flow. Use contractions. Never say "
+        "'As an AI', 'I cannot', 'based on the provided context', 'it is important to note', "
+        "'I don't have access to real-time data', or any robotic phrases.\n"
+        "2. BE DIRECT. Start with the answer. No introductions, no disclaimers. "
+        "If someone asks about a helpline, just give the number. "
+        "If someone asks about rules, summarise them plainly.\n"
+        "3. USE DETAILS. Extract specific names, phone numbers, dates, portal URLs "
+        "from the context. Cite them naturally inline as [1], [2].\n"
+        "4. NEVER make something up. If it's not in the context, don't mention it.\n"
+        "5. KEEP IT SHORT. 2-4 paragraphs max. People want answers, not essays.\n"
+        "6. No bullet points, headings, or markdown. Write in plain paragraphs.\n"
+        "7. Never start with 'Here is...' or 'Based on...'. Just say the answer.\n"
     )
     if authority:
         system_prompt = base_prompt + (
-            "5. An AUTHORITY MATCH is provided below. Lead with it plainly, "
-            "stating the responsible authority and how to report, before adding background.\n"
+            "7. You have an authority match below. Mention it naturally — "
+            "'This is handled by...', 'You need to contact...' — "
+            "don't announce it like a database record.\n"
         )
     else:
         system_prompt = base_prompt + (
-            "5. AUTHORITY MATCH: none — do not invent one, just cite background sources normally.\n"
+            "7. There's no specific authority match for this, so just answer "
+            "based on the background info. Don't invent one.\n"
         )
 
     authority_block = ""
@@ -305,47 +311,54 @@ def answer_node(state: AgentState) -> AgentState:
         )
 
     sources_list = "\n".join(f'[{c["id"]}] {c["source"]}: {c["url"]}' for c in citations)
-    prompt = f"""## User Question:
+    prompt = f"""## Question from a Delhi resident:
 {state['query']}
 
 {live_data_block}{authority_block}
 
-## Retrieved Context:
-{context_text if context_text else '(no additional background retrieved)'}
+## Background info (use this to answer):
+{context_text if context_text else '(none provided)'}
 
 ## SOURCES:
 {sources_list if sources_list else '(none)'}
 
-Answer the question. If LIVE DATA is present, lead with it first, then add
-any useful background from the retrieved context with inline citations like [1].
-If an AUTHORITY MATCH is given, state it clearly after any live data."""
+Answer naturally. If there's live data, start with it. If there's an authority, "
+"tell them who to contact and how. Use the background info to add useful details. "
+"Write like you're talking to someone, not writing a report."""
 
     llm_response = call_llm(prompt=prompt, system_prompt=system_prompt)
 
     if llm_response:
         answer = llm_response.strip()
     elif live_data:
-        # deterministic fallback surfacing live data
+        aqi = live_data.get('aqi', 'N/A')
+        pol = live_data.get('dominant_pollutant', 'unknown')
+        ts = live_data.get('timestamp', 'unknown time')
+        source = live_data.get('source_url', '')
         answer = (
-            f"Current Delhi AQI: {live_data.get('aqi', 'N/A')} "
-            f"({live_data.get('dominant_pollutant', 'unknown')}), "
-            f"as of {live_data.get('timestamp', 'unknown time')}. "
-            f"Source: waqi.info — {live_data.get('source_url', '')}"
+            f"Right now Delhi's AQI is {aqi} ({pol} dominant), recorded at {ts}. "
+            f"Source: waqi.info ({source})"
         )
     elif authority:
         answer = (
-            f"This falls under **{authority['authority']}**.\n\n"
-            f"How to report: {authority['channel']}\n"
-            f"Contact: {authority['contact']}\n"
-            + (f"Portal: {authority['portal']}\n" if authority.get("portal") else "")
-            + f"\nSource: {authority['name']} — {authority['url']}"
+            f"This is handled by {authority['authority']}. "
+            f"You can reach them via {authority['channel']} — "
+            f"contact: {authority['contact']}."
+            + (f" Also check their portal: {authority['portal']}." if authority.get("portal") else "")
         )
     else:
-        parts = []
-        for i, doc in enumerate(state.get("docs", []), 1):
-            source = doc.metadata.get("source", "Unknown")
-            parts.append(f"Based on {source}: {doc.page_content[:400]}")
-        answer = "\n\n".join(parts) if parts else "I couldn't find enough information to answer that."
+        docs = state.get("docs", [])
+        if docs:
+            best = docs[0]
+            src = best.metadata.get("source", "").replace("_", " ")
+            content = best.page_content[:600].strip()
+            lines = content.split("\n")
+            readable = "\n".join(l for l in lines if l.strip() and len(l.strip()) > 20)
+            if not readable:
+                readable = content[:400]
+            answer = readable
+        else:
+            answer = "Haven't come across that yet. Try asking about garbage collection, road repairs, water supply, or helplines — that's what I have info on."
 
     return {**state, "answer": answer}
 
@@ -354,10 +367,7 @@ If an AUTHORITY MATCH is given, state it clearly after any live data."""
 # 7. complaint_draft_node — only runs if the user actually wants to file something.
 # ---------------------------------------------------------------------------
 
-DRAFT_SYSTEM_PROMPT = """Write a short, polite, factual civic complaint (max 120 words)
-a Delhi citizen could submit as-is. Include: the issue, the location if given (or note
-that location should be added), and a request for resolution within a reasonable
-timeframe. Do not invent facts the user didn't provide. Output plain text only."""
+DRAFT_SYSTEM_PROMPT = """Write a short civic complaint (max 100 words) that sounds like a real Delhi resident wrote it. Include: the issue, location, and a request to fix it. Keep it polite but direct. No fancy language."""
 
 
 def complaint_draft_node(state: AgentState) -> AgentState:
