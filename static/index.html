@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delhi Civic Sense Navigator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1a1a1a; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #1a5276; color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header .subtitle { font-size: 12px; opacity: 0.8; }
+  .container { max-width: 800px; margin: 0 auto; width: 100%; flex: 1; display: flex; flex-direction: column; padding: 16px; gap: 12px; }
+  .chat-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+  .message { max-width: 85%; padding: 12px 16px; border-radius: 12px; line-height: 1.5; font-size: 14px; }
+  .user-msg { background: #1a5276; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .bot-msg { background: #fff; color: #1a1a1a; align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .bot-msg .answer { margin-bottom: 8px; }
+  .bot-msg .citations { border-top: 1px solid #e8e8e8; padding-top: 8px; margin-top: 8px; font-size: 12px; color: #666; }
+  .bot-msg .citation-item { margin: 2px 0; }
+  .bot-msg .citation-item a { color: #1a5276; text-decoration: none; }
+  .bot-msg .citation-item a:hover { text-decoration: underline; }
+  .bot-msg sup { color: #1a5276; font-weight: 600; cursor: pointer; }
+  .input-area { display: flex; gap: 8px; padding: 12px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .input-area textarea { flex: 1; border: none; outline: none; resize: none; font-size: 14px; padding: 8px; font-family: inherit; min-height: 44px; max-height: 120px; }
+  .input-area button { background: #1a5276; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; cursor: pointer; font-weight: 500; transition: background 0.2s; }
+  .input-area button:hover { background: #154360; }
+  .input-area button:disabled { background: #b3c7d6; cursor: not-allowed; }
+  .typing { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+  .typing span { width: 6px; height: 6px; background: #999; border-radius: 50%; animation: pulse 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+  .suggestions { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0; }
+  .suggestions button { background: #e8f0f8; color: #1a5276; border: 1px solid #c5d9e8; border-radius: 16px; padding: 6px 14px; font-size: 12px; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+  .suggestions button:hover { background: #d0e3f2; }
+  .footer-info { text-align: center; font-size: 11px; color: #999; padding: 8px; }
+  .footer-info a { color: #1a5276; text-decoration: none; }
+  @media (max-width: 600px) { .container { padding: 8px; } .message { max-width: 95%; font-size: 13px; } }
+
+  .authority-card { background: #eef7ee; border: 1px solid #b7dfb7; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+  .authority-card .badge { display: inline-block; background: #2e7d32; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .03em; padding: 2px 8px; border-radius: 10px; margin-bottom: 6px; }
+  .authority-card .row { margin: 2px 0; }
+  .authority-card .row b { color: #1a1a1a; }
+
+  .low-confidence-badge { display: inline-block; background: #fdecea; color: #b3261e; border: 1px solid #f5c2bd; font-size: 10px; font-weight: 700; letter-spacing: .03em; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+
+  .draft-box { background: #fffbe6; border: 1px solid #f0e4a0; border-radius: 8px; padding: 10px 12px; margin-top: 8px; font-size: 13px; white-space: pre-wrap; }
+  .draft-box .draft-label { font-size: 10px; font-weight: 700; letter-spacing: .03em; color: #8a6d00; margin-bottom: 6px; display: block; }
+  .copy-btn { margin-top: 6px; background: #fff; border: 1px solid #d9c766; color: #8a6d00; font-size: 11px; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .copy-btn:hover { background: #fdf6d8; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Delhi Civic Sense Navigator</h1>
+    <div class="subtitle">Ask about civic issues in Delhi — with cited government sources</div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="suggestions" id="suggestions">
+    <button onclick="ask('What are the new Solid Waste Management Rules 2026?')">SWM Rules 2026</button>
+    <button onclick="ask('How do I report a pothole or garbage in Delhi?')">Report Issues</button>
+    <button onclick="ask('What helplines exist for water, electricity, and emergencies in Delhi?')">Helplines</button>
+    <button onclick="ask('What is being done about Delhi air pollution?')">Air Pollution</button>
+    <button onclick="ask('Tell me about MCD waste management in Delhi')">MCD Waste Mgmt</button>
+    <button onclick="ask('Garbage hasn\'t been collected on my street for 3 days in Rohini, please help me report it')">Report Garbage Issue</button>
+  </div>
+
+  <div class="chat-area" id="chatArea">
+    <div class="message bot-msg">
+      <div class="answer">Namaste! I'm the Delhi Civic Sense Navigator. Ask me about waste management, air pollution, helplines, reporting civic issues, or any Delhi civic matter. I answer using official government sources with citations.</div>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <textarea id="queryInput" placeholder="Ask about Delhi civic issues..." rows="1" oninput="autoResize(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQuery()}"></textarea>
+    <button id="sendBtn" onclick="sendQuery()">Send</button>
+  </div>
+  <div class="footer-info">
+    Data sourced from MCD, Delhi Government, PIB, DPCC, and other official sources.
+    <a href="/api/sources">View all sources</a>
+  </div>
+</div>
+
+<script>
+function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+
+function addMessage(text, isUser) {
+  const area = document.getElementById('chatArea');
+  const div = document.createElement('div');
+  div.className = `message ${isUser ? 'user-msg' : 'bot-msg'}`;
+  div.innerHTML = text;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+  return div;
+}
+
+function showTyping() {
+  const area = document.getElementById('chatArea');
+  const div = document.createElement('div');
+  div.className = 'message bot-msg';
+  div.id = 'typingIndicator';
+  div.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById('typingIndicator');
+  if (el) el.remove();
+}
+
+function renderAnswer(answer) {
+  // Replace [N] citations with superscript links
+  return answer.replace(/\[(\d+)\]/g, '<sup>$1</sup>');
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.innerText = s;
+  return d.innerHTML;
+}
+
+function addBotMessage(data) {
+  let html = '';
+
+  if (data.needs_clarification) {
+    html += '<div class="low-confidence-badge">NOT CONFIDENT — ASKING INSTEAD OF GUESSING</div>';
+  }
+
+  if (data.authority) {
+    const a = data.authority;
+    html += `<div class="authority-card">
+      <div class="badge">ROUTED</div>
+      <div class="row"><b>Authority:</b> ${escapeHtml(a.authority)}</div>
+      <div class="row"><b>How to report:</b> ${escapeHtml(a.channel)}</div>
+      <div class="row"><b>Contact:</b> ${escapeHtml(a.contact)}</div>
+      ${a.portal ? `<div class="row"><b>Portal:</b> <a href="${a.portal}" target="_blank" rel="noopener">${a.portal}</a></div>` : ''}
+      <div class="row" style="color:#4a7a4a; font-size:11px; margin-top:4px;">Source: <a href="${a.url}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a></div>
+    </div>`;
+  }
+
+  const answerHtml = renderAnswer(data.answer);
+  html += `<div class="answer">${answerHtml}</div>`;
+
+  if (data.citations && data.citations.length > 0) {
+    html += '<div class="citations"><strong>Sources:</strong>';
+    data.citations.forEach(c => {
+      html += `<div class="citation-item">[${c.id}] <a href="${c.url}" target="_blank" rel="noopener">${c.source}</a></div>`;
+    });
+    html += '</div>';
+  }
+
+  if (data.complaint_draft) {
+    const draftId = 'draft_' + Date.now();
+    html += `<div class="draft-box">
+      <span class="draft-label">DRAFTED COMPLAINT — READY TO SUBMIT</span>
+      <div id="${draftId}">${escapeHtml(data.complaint_draft)}</div>
+      <button class="copy-btn" onclick="copyDraft('${draftId}', this)">Copy</button>
+    </div>`;
+  }
+
+  addMessage(html, false);
+}
+
+function copyDraft(id, btn) {
+  const text = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const original = btn.innerText;
+    btn.innerText = 'Copied!';
+    setTimeout(() => { btn.innerText = original; }, 1500);
+  });
+}
+
+async function sendQuery() {
+  const input = document.getElementById('queryInput');
+  const btn = document.getElementById('sendBtn');
+  const query = input.value.trim();
+  if (!query) return;
+
+  addMessage(query, true);
+  input.value = '';
+  autoResize(input);
+  btn.disabled = true;
+
+  showTyping();
+
+  try {
+    const resp = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    const data = await resp.json();
+    removeTyping();
+    addBotMessage(data);
+  } catch (err) {
+    removeTyping();
+    addMessage('Sorry, something went wrong. Please try again.', false);
+  } finally {
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
+function ask(query) {
+  document.getElementById('queryInput').value = query;
+  sendQuery();
+}
+</script>
+</body>
+</html>
