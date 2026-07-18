@@ -5,12 +5,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from src.agent.civic_qa import list_sources
-from src.agent.graph import run_agent
+from src.agent.civic_qa import answer_query, list_sources
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,12 +18,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Delhi Civic Sense Navigator",
-    description=(
-        "LangGraph agent for Delhi civic issues: classifies intent, routes to the "
-        "correct authority with a cited source, asks for clarification instead of "
-        "guessing when confidence is low, and drafts complaints on request."
-    ),
-    version="3.0.0",
+    description="AI agent that answers questions about civic issues in Delhi with cited sources + web search fallback",
+    version="2.1.0",
 )
 
 app.add_middleware(
@@ -48,12 +42,7 @@ class CivicResponse(BaseModel):
     citations: list[dict]
     query: str
     chunks_retrieved: int = 0
-    issue_type: str | None = None
-    authority: dict | None = None
-    confidence: str = "high"
-    needs_clarification: bool = False
-    clarifying_question: str | None = None
-    complaint_draft: str | None = None
+    web_search_used: bool = False
 
 
 @app.get("/")
@@ -69,18 +58,13 @@ async def civic_ask(req: CivicQuery):
     if not req.query or not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
     logger.info(f"Civic query: {req.query[:100]}...")
-    result = run_agent(req.query.strip())
+    result = answer_query(req.query.strip())
     return CivicResponse(
         answer=result["answer"],
         citations=result["citations"],
         query=result["query"],
         chunks_retrieved=result.get("chunks_retrieved", 0),
-        issue_type=result.get("issue_type"),
-        authority=result.get("authority"),
-        confidence=result.get("confidence", "high"),
-        needs_clarification=result.get("needs_clarification", False),
-        clarifying_question=result.get("clarifying_question"),
-        complaint_draft=result.get("complaint_draft"),
+        web_search_used=result.get("web_search_used", False),
     )
 
 
@@ -94,7 +78,7 @@ async def get_sources():
 async def health():
     return {
         "status": "ok",
-        "agent": "Delhi Civic Sense Navigator v3 (LangGraph)",
+        "agent": "Delhi Civic Sense Navigator v2.1",
         "timestamp": datetime.now().isoformat(),
         "llm_configured": bool(os.getenv("GROQ_API_KEY")),
     }
