@@ -6,6 +6,8 @@ from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
+from src.agent.config import settings
+from src.agent import es_store
 from src.agent.llm import call_llm
 
 logger = logging.getLogger(__name__)
@@ -13,29 +15,51 @@ logger = logging.getLogger(__name__)
 CHROMA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "chroma")
 COLLECTION_NAME = "delhi_civic_sense"
 RETRIEVAL_K = 5
+DISTANCE_THRESHOLD = 1.0
 
 _retriever = None
 _vectorstore = None
+_use_es = False
+_embeddings = None
 
 
-def _get_vectorstore():
-    global _vectorstore
-    if _vectorstore is not None:
-        return _vectorstore
-    if not os.path.exists(CHROMA_DIR):
-        logger.warning(f"ChromaDB not found at {CHROMA_DIR}")
-        return None
-    try:
-        embeddings = HuggingFaceEmbeddings(
+def _get_embeddings():
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2",
             model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": True},
         )
+    return _embeddings
+
+
+def _get_vectorstore():
+    global _vectorstore, _use_es
+
+    if _vectorstore is not None:
+        return _vectorstore
+
+    # Try Elasticsearch first if configured
+    es = es_store.get_es_store()
+    if es is not None:
+        _vectorstore = es
+        _use_es = True
+        logger.info("Using Elasticsearch as vector store")
+        return _vectorstore
+
+    # Fall back to Chroma
+    if not os.path.exists(CHROMA_DIR):
+        logger.warning(f"ChromaDB not found at {CHROMA_DIR}")
+        return None
+    try:
         _vectorstore = Chroma(
             collection_name=COLLECTION_NAME,
-            embedding_function=embeddings,
+            embedding_function=_get_embeddings(),
             persist_directory=CHROMA_DIR,
         )
+        _use_es = False
+        logger.info("Using Chroma as vector store")
         return _vectorstore
     except Exception as e:
         logger.error(f"Vectorstore init failed: {e}")
@@ -46,13 +70,10 @@ def _get_retriever():
     global _retriever
     if _retriever is not None:
         return _retriever
-    if not os.path.exists(CHROMA_DIR):
-        logger.warning(f"ChromaDB not found at {CHROMA_DIR}")
+    vectorstore = _get_vectorstore()
+    if vectorstore is None:
         return None
     try:
-        vectorstore = _get_vectorstore()
-        if vectorstore is None:
-            return None
         _retriever = vectorstore.as_retriever(
             search_type="similarity",
             search_kwargs={"k": RETRIEVAL_K},
@@ -126,7 +147,6 @@ def answer_query(query: str) -> dict:
     all_citations = []
     web_results_used = False
 
-    # Step 1: Try vector DB retrieval
     if retriever:
         try:
             docs = retriever.invoke(query)
@@ -159,9 +179,8 @@ Now write your answer. Extract every specific detail from the context."""
     if prompt:
         llm_response = call_llm(prompt=prompt, system_prompt=QA_SYSTEM_PROMPT)
 
-    # Step 2: If LLM gave a weak answer or no context, fall back to web search
-    answer = (llm_response or "").strip()
     needs_web = False
+    answer = (llm_response or "").strip()
 
     if not answer:
         needs_web = True
@@ -202,7 +221,6 @@ Write a helpful answer. Always include specific numbers, names, and URLs."""
                 answer = web_answer.strip()
                 web_results_used = True
             else:
-                # Raw fallback
                 parts = []
                 for r in web_results[:3]:
                     parts.append(f"{r['title']}: {r['snippet']} ({r['url']})")
@@ -226,6 +244,17 @@ def list_sources() -> list[dict]:
     if retriever is None:
         return []
     try:
+        if _use_es:
+            es = es_store.get_es_store()
+            if es is None:
+                return []
+            resp = es.client.search(
+                index=es.index_name,
+                body={"size": 0, "aggs": {"sources": {"terms": {"field": "metadata.source.keyword", "size": 50}}}},
+            )
+            buckets = resp.get("aggregations", {}).get("sources", {}).get("buckets", [])
+            return [{"source": b["key"], "url": ""} for b in buckets]
+
         vectorstore = getattr(retriever, "vectorstore", None)
         if vectorstore is None:
             return []

@@ -19,4 +19,12 @@ class Settings:
     MAX_TASKS: int = 10
     AGENT_NAME: str = "PlanExecute-v1"
 
+    # Elasticsearch — set ES_URL or ELASTICSEARCH_URL to enable; falls back to Chroma
+    ES_URL: str = os.getenv("ES_URL", os.getenv("ELASTICSEARCH_URL", ""))
+    ES_API_KEY: str = os.getenv("ES_API_KEY", os.getenv("ELASTICSEARCH_API_KEY", ""))
+    ES_USERNAME: str = os.getenv("ES_USERNAME", "elastic")
+    ES_PASSWORD: str = os.getenv("ES_PASSWORD", "")
+    ES_INDEX_NAME: str = os.getenv("ES_INDEX_NAME", "delhi_civic_docs")
+    ES_ANALYTICS_INDEX: str = os.getenv("ES_ANALYTICS_INDEX", "delhi_civic_analytics")
+
 settings = Settings()

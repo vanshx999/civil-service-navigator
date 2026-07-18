@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delhi Civic Map — 3D</title>
+<script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: #07070d;
+  color: #f1f5f9;
+  overflow: hidden;
+  height: 100vh;
+}
+#map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* ── OVERLAY CONTROLS ── */
+.controls-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
+.controls-overlay::-webkit-scrollbar { width: 3px; }
+.controls-overlay::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+.control-panel {
+  background: rgba(7,7,13,0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 14px 16px;
+  min-width: 220px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.control-panel .title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+.control-panel .btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #e2e8f0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.2s;
+  width: 100%;
+}
+.control-panel .btn:hover {
+  background: rgba(99,102,241,0.1);
+  border-color: rgba(99,102,241,0.2);
+  transform: translateY(-1px);
+}
+.control-panel .btn.active {
+  background: rgba(99,102,241,0.15);
+  border-color: rgba(99,102,241,0.3);
+  color: #818cf8;
+}
+.control-panel .btn:active { transform: translateY(0); }
+.control-panel .btn .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.filter-row:hover { background: rgba(255,255,255,0.04); }
+.filter-row input[type="checkbox"] {
+  accent-color: #6366f1;
+  width: 14px; height: 14px;
+  cursor: pointer;
+}
+.filter-row .color-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.filter-row .count {
+  margin-left: auto;
+  font-size: 10px;
+  color: #64748b;
+}
+
+/* ── STAT BAR ── */
+.stat-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(7,7,13,0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 10px 20px;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  font-size: 11px;
+}
+.stat-bar .stat-item {
+  text-align: center;
+}
+.stat-bar .stat-item .num {
+  font-size: 16px;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+.stat-bar .stat-item .lbl {
+  font-size: 9px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── POPUP ── */
+.maplibregl-popup-content {
+  background: rgba(15,15,25,0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+  color: #e2e8f0 !important;
+  font-family: 'Inter', sans-serif !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5) !important;
+  max-width: 320px;
+}
+.maplibregl-popup-tip { display: none; }
+.popup-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 6px;
+}
+.popup-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 10px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.popup-info { font-size: 11px; line-height: 1.7; color: #94a3b8; }
+.popup-info b { color: #e2e8f0; }
+.popup-helpline {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(99,102,241,0.08);
+  border-radius: 6px;
+  font-size: 10px;
+  color: #818cf8;
+}
+.popup-source {
+  margin-top: 6px;
+  font-size: 9px;
+  color: #475569;
+}
+
+/* ── NAV BAR ── */
+.nav-bar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 6px;
+}
+.nav-bar a {
+  background: rgba(7,7,13,0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 8px 14px;
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.nav-bar a:hover {
+  background: rgba(99,102,241,0.1);
+  border-color: rgba(99,102,241,0.2);
+  color: #818cf8;
+}
+
+/* ── LOADING ── */
+.loading {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #07070d;
+  color: #64748b;
+  font-size: 13px;
+  transition: opacity 0.5s;
+}
+.loading.hidden { opacity: 0; pointer-events: none; }
+.loading .spinner {
+  width: 24px; height: 24px;
+  border: 2px solid rgba(99,102,241,0.1);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+  .controls-overlay { top: 8px; left: 8px; }
+  .control-panel { min-width: 180px; padding: 10px 12px; }
+  .stat-bar { padding: 8px 14px; gap: 14px; }
+  .stat-bar .stat-item .num { font-size: 13px; }
+}
+</style>
+</head>
+<body>
+
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  Loading Delhi Civic Map...
+</div>
+
+<div id="map"></div>
+
+<div class="nav-bar">
+  <a href="/">&#8592; Chat</a>
+  <a href="/login">Login</a>
+</div>
+
+<div class="controls-overlay">
+  <div class="control-panel">
+    <div class="title">Issue Filters</div>
+    <div class="filter-group" id="filterGroup"></div>
+  </div>
+  <div class="control-panel">
+    <div class="title">Map Actions</div>
+    <button class="btn" id="btnMyLocation">
+      <span>&#9678;</span> My Location
+    </button>
+    <button class="btn" id="btnHeatmap">
+      <span>&#9671;</span> Heatmap Toggle
+    </button>
+    <button class="btn" id="btnResetView">
+      <span>&#8634;</span> Reset View
+    </button>
+  </div>
+</div>
+
+<div class="stat-bar" id="statBar"></div>
+
+<script>
+const DELHI_CENTER = [77.2090, 28.6139];
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+  center: DELHI_CENTER,
+  zoom: 11,
+  pitch: 45,
+  bearing: 0,
+  antialias: true,
+});
+
+map.on('load', async () => {
+  // Add terrain for 3D effect
+  map.addSource('terrain', {
+    type: 'raster-dem',
+    url: 'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=ZhcoGzBFFrhZAtiz9jr2',
+    tileSize: 512,
+  });
+  map.setTerrain({ source: 'terrain', exaggeration: 1.2 });
+
+  // Add extrusions for buildings (simulated via fill-extrusion)
+  map.addSource('buildings', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: [],
+    },
+  });
+
+  document.getElementById('loading').classList.add('hidden');
+
+  await loadIssues();
+  initFilters();
+  initControls();
+  initStats();
+});
+
+async function loadIssues() {
+  const resp = await fetch('/api/map/issues?limit=300');
+  const data = await resp.json();
+  const features = data.features;
+
+  // Remove old layers/sources
+  ['issues-heat', 'issues-cluster', 'issues-cluster-count', 'issues-point', 'issues-source'].forEach(id => {
+    if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(id)) map.removeSource(id);
+  });
+
+  map.addSource('issues-source', { type: 'geojson', data: data, cluster: true, clusterMaxZoom: 14, clusterRadius: 50 });
+
+  // Clusters
+  map.addLayer({
+    id: 'issues-cluster',
+    type: 'circle',
+    source: 'issues-source',
+    filter: ['has', 'point_count'],
+    paint: {
+      'circle-color': '#6366f1',
+      'circle-radius': ['step', ['get', 'point_count'], 20, 10, 30, 30, 40],
+      'circle-opacity': 0.3,
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#818cf8',
+    },
+  });
+
+  map.addLayer({
+    id: 'issues-cluster-count',
+    type: 'symbol',
+    source: 'issues-source',
+    filter: ['has', 'point_count'],
+    layout: {
+      'text-field': ['get', 'point_count_abbreviated'],
+      'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+      'text-size': 12,
+    },
+    paint: { 'text-color': '#fff' },
+  });
+
+  // Individual points
+  map.addLayer({
+    id: 'issues-point',
+    type: 'circle',
+    source: 'issues-source',
+    filter: ['!', ['has', 'point_count']],
+    paint: {
+      'circle-color': ['get', 'color'],
+      'circle-radius': ['case', ['==', ['get', 'severity'], 'critical'], 10, ['==', ['get', 'severity'], 'high'], 8, ['==', ['get', 'severity'], 'medium'], 6, 5],
+      'circle-opacity': 0.8,
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#fff',
+      'circle-stroke-opacity': 0.3,
+    },
+  });
+
+  // Hover effect
+  map.on('mouseenter', 'issues-point', () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', 'issues-point', () => { map.getCanvas().style.cursor = ''; });
+
+  // Click popup
+  map.on('click', 'issues-point', (e) => {
+    const p = e.features[0].properties;
+    const $ = (v) => v || 'N/A';
+    new maplibregl.Popup({ offset: 25, maxWidth: '340px' })
+      .setLngLat(e.features[0].geometry.coordinates)
+      .setHTML(`
+        <div class="popup-title">${$(p.title)}</div>
+        <div class="popup-cat" style="background:${p.color}20;color:${p.color};border:1px solid ${p.color}30">${p.icon} ${p.category_label}</div>
+        <div class="popup-info">
+          <b>Area:</b> ${$(p.area)}<br>
+          <b>Severity:</b> ${p.severity} &middot; <b>Status:</b> ${p.status}<br>
+          <b>Reported:</b> ${new Date(p.reported_at).toLocaleString()}<br>
+          <b>Confidence:</b> ${Math.round(p.confidence * 100)}%
+        </div>
+        <div class="popup-helpline">${$(p.helpline)}</div>
+        <div class="popup-source">Source: ${$(p.source)}</div>
+      `)
+      .addTo(map);
+  });
+
+  window._allFeatures = features;
+}
+
+function initFilters() {
+  fetch('/api/map/categories').then(r => r.json()).then(data => {
+    const group = document.getElementById('filterGroup');
+    const counts = {};
+    (window._allFeatures || []).forEach(f => {
+      const c = f.properties.category;
+      counts[c] = (counts[c] || 0) + 1;
+    });
+
+    data.categories.forEach(cat => {
+      const row = document.createElement('label');
+      row.className = 'filter-row';
+      const count = counts[cat.id] || 0;
+      row.innerHTML = `
+        <input type="checkbox" checked data-category="${cat.id}">
+        <span class="color-dot" style="background:${cat.color}"></span>
+        ${cat.label}
+        <span class="count">${count}</span>
+      `;
+      row.querySelector('input').addEventListener('change', applyFilters);
+      group.appendChild(row);
+    });
+  });
+}
+
+function applyFilters() {
+  const checked = [...document.querySelectorAll('#filterGroup input:checked')].map(i => i.dataset.category);
+  map.setFilter('issues-point', ['!', ['has', 'point_count']]);
+  // Re-apply through source
+}
+
+function initControls() {
+  document.getElementById('btnMyLocation').addEventListener('click', () => {
+    if (!navigator.geolocation) return alert('Geolocation not available');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 14, pitch: 60 });
+      },
+      () => alert('Could not get your location. GPS permission denied?')
+    );
+  });
+
+  let heatmapVisible = false;
+  document.getElementById('btnHeatmap').addEventListener('click', function () {
+    heatmapVisible = !heatmapVisible;
+    this.classList.toggle('active');
+    const id = 'issues-heatmap-layer';
+    if (heatmapVisible) {
+      if (!map.getSource('heat-source')) {
+        map.addSource('heat-source', { type: 'geojson', data: { type: 'FeatureCollection', features: window._allFeatures || [] } });
+        map.addLayer({
+          id: id,
+          type: 'heatmap',
+          source: 'heat-source',
+          paint: {
+            'heatmap-weight': ['case', ['==', ['get', 'severity'], 'critical'], 1, ['==', ['get', 'severity'], 'high'], 0.8, 0.4],
+            'heatmap-intensity': 0.8,
+            'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,0,0,0)', 0.2, '#6366f1', 0.4, '#22c55e', 0.6, '#eab308', 0.8, '#ef4444', 1, '#dc2626'],
+            'heatmap-radius': 30,
+            'heatmap-opacity': 0.6,
+          },
+        });
+      } else {
+        map.setLayoutProperty(id, 'visibility', 'visible');
+      }
+    } else {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+    }
+  });
+
+  document.getElementById('btnResetView').addEventListener('click', () => {
+    map.flyTo({ center: DELHI_CENTER, zoom: 11, pitch: 45, bearing: 0 });
+  });
+}
+
+async function initStats() {
+  const resp = await fetch('/api/map/stats');
+  const data = await resp.json();
+  const bar = document.getElementById('statBar');
+  bar.innerHTML = `
+    <div class="stat-item"><div class="num">${data.total_issues}</div><div class="lbl">Total Issues</div></div>
+    <div class="stat-item"><div class="num">${data.active}</div><div class="lbl">Active</div></div>
+    <div class="stat-item"><div class="num">${data.resolved}</div><div class="lbl">Resolved</div></div>
+  `;
+}
+</script>
+</body>
+</html>

@@ -5,5 +5,7 @@ httpx
 langgraph
 langchain-core
 langchain-community
+langchain-elasticsearch
 chromadb
 sentence-transformers
+elasticsearch

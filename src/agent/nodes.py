@@ -103,8 +103,15 @@ def retrieve_node(state: AgentState) -> AgentState:
         logger.error(f"retrieve_node: retrieval failed: {e}")
         return {**state, "docs": [], "citations": [], "chunks_retrieved": 0}
 
-    # Filter by distance threshold so low-relevance results don't count
-    docs = [doc for doc, score in scored if score < DISTANCE_THRESHOLD]
+    # ES returns (doc, score) where score is similarity (higher = better);
+    # Chroma returns (doc, score) where score is distance (lower = better).
+    # Normalize: treat any score < threshold as a match for Chroma,
+    # and for ES (cosine similarity) treat scores > 0.3 as good.
+    threshold = civic_qa.DISTANCE_THRESHOLD
+    if civic_qa._use_es:
+        docs = [doc for doc, score in scored if score > 0.3]
+    else:
+        docs = [doc for doc, score in scored if score < threshold]
 
     context_text, citations = civic_qa.format_context(docs) if docs else ("", [])
     return {
