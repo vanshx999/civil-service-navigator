@@ -159,17 +159,6 @@ def confidence_gate_node(state: AgentState) -> AgentState:
 # 4. answer_node — either return the clarifying question, or produce a grounded answer.
 # ---------------------------------------------------------------------------
 
-QA_SYSTEM_PROMPT = """You are the Delhi Civic Sense Navigator, an assistant that answers
-questions about civic issues in Delhi, India, using ONLY the retrieved context provided.
-
-Rules:
-1. Answer strictly from the retrieved context below. If it's insufficient, say so.
-2. Cite sources inline using numbered brackets like [1], [2], matching the SOURCES list.
-3. Be concise (2-4 short paragraphs). Include helpline numbers/portals when relevant.
-4. If an "authority match" is provided, lead with it plainly before adding background.
-"""
-
-
 def answer_node(state: AgentState) -> AgentState:
     if state.get("needs_clarification"):
         return {**state, "answer": state["clarifying_question"], "complaint_draft": None}
@@ -177,6 +166,28 @@ def answer_node(state: AgentState) -> AgentState:
     authority = state.get("authority")
     context_text = state.get("_context_text", "")
     citations = state.get("citations", [])
+
+    # Build system prompt dynamically to avoid mentioning "authority match" when none exists
+    base_prompt = (
+        "You are the Delhi Civic Sense Navigator, an assistant that answers "
+        "questions about civic issues in Delhi, India, using ONLY the retrieved context provided.\n\n"
+        "Rules:\n"
+        "1. Answer strictly from the retrieved context below. Extract EVERY specific fact, "
+        "number, name, helpline, date, and rule mentioned in the context that's relevant.\n"
+        "2. Cite sources inline using numbered brackets like [1], [2], matching the SOURCES list.\n"
+        "3. Be concise (2-4 short paragraphs). Include helpline numbers/portals when relevant.\n"
+        "4. NEVER say 'the context is insufficient' or 'I don't have enough information' — "
+        "the context DOES contain information, extract it.\n"
+    )
+    if authority:
+        system_prompt = base_prompt + (
+            "5. An AUTHORITY MATCH is provided below. Lead with it plainly, "
+            "stating the responsible authority and how to report, before adding background.\n"
+        )
+    else:
+        system_prompt = base_prompt + (
+            "5. AUTHORITY MATCH: none — do not invent one, just cite background sources normally.\n"
+        )
 
     authority_block = ""
     if authority:
@@ -203,7 +214,7 @@ def answer_node(state: AgentState) -> AgentState:
 Answer the question. If an AUTHORITY MATCH is given, state it clearly first, then add
 any useful background from the retrieved context with inline citations like [1]."""
 
-    llm_response = call_llm(prompt=prompt, system_prompt=QA_SYSTEM_PROMPT)
+    llm_response = call_llm(prompt=prompt, system_prompt=system_prompt)
 
     if llm_response:
         answer = llm_response.strip()

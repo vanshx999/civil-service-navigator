@@ -42,6 +42,12 @@ def load_documents() -> list[Document]:
         else:
             body = content
 
+        # Skip files whose body (after the header) is under 300 characters
+        body = body.strip()
+        if len(body) < 300:
+            print(f"  WARNING: Skipping {os.path.basename(filepath)} — body too short ({len(body)} chars, min 300)")
+            continue
+
         doc = Document(
             page_content=body,
             metadata={
