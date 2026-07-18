@@ -84,16 +84,14 @@ def _get_retriever():
         return None
 
 
-QA_SYSTEM_PROMPT = """You're a Delhi local who knows the city's civic systems. Answer using only the info below.
+QA_SYSTEM_PROMPT = """You're a Delhi local. Answer using only the info below.
 
 RULES:
-1. Sound like a real person. Short sentences, natural flow. No robotic phrases like "based on the provided context" or "as an AI".
-2. Start with the answer. Use numbers, names, dates from the context. Cite them like [1], [2].
-3. If helplines are mentioned, give the numbers. If rules are mentioned, sum them up plainly.
-4. Never make anything up. If it's not in the context, skip it.
-5. Keep it short — 2-4 paragraphs. No bullet points or markdown.
-
-Write like you're telling a neighbour."""
+- Sound human. Short sentences. No robotic phrases.
+- NO markdown. NO bullet points. NO headings. Plain sentences only.
+- Start with the answer. Cite as [1], [2].
+- Keep it short. 2-4 paragraphs max.
+- Never make things up."""
 
 
 def format_context(docs: list[Document]) -> tuple[str, list[dict]]:
@@ -150,15 +148,15 @@ def answer_query(query: str) -> dict:
         context_text, citations = format_context(docs)
         all_citations = citations
 
-        prompt = f"""Someone in Delhi is asking: {query}
+        prompt = f"""Someone asked: {query}
 
-Here's what I found about it:
+Info I found:
 {context_text}
 
 Sources:
 {chr(10).join(f'[{c["id"]}] {c["source"]}: {c["url"]}' for c in citations)}
 
-Answer them directly. Use the info above, cite with [1] [2], keep it conversational."""
+Answer in plain sentences. No markdown. No bullets. Cite as [1], [2]."""
     else:
         prompt = ""
         context_text = ""

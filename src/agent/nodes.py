@@ -257,34 +257,24 @@ def answer_node(state: AgentState) -> AgentState:
     live_data = state.get("live_data")
 
     base_prompt = (
-        "You are a Delhi local who knows the city's civic systems inside out. "
-        "You answer questions about Delhi civic issues — waste, roads, water, "
-        "electricity, pollution, helplines — like you're talking to a neighbour.\n\n"
-        "RULES — READ CAREFULLY:\n"
-        "1. SOUND HUMAN. Write like a knowledgeable Delhiite having a conversation. "
-        "Short sentences. Natural flow. Use contractions. Never say "
-        "'As an AI', 'I cannot', 'based on the provided context', 'it is important to note', "
-        "'I don't have access to real-time data', or any robotic phrases.\n"
-        "2. BE DIRECT. Start with the answer. No introductions, no disclaimers. "
-        "If someone asks about a helpline, just give the number. "
-        "If someone asks about rules, summarise them plainly.\n"
-        "3. USE DETAILS. Extract specific names, phone numbers, dates, portal URLs "
-        "from the context. Cite them naturally inline as [1], [2].\n"
-        "4. NEVER make something up. If it's not in the context, don't mention it.\n"
-        "5. KEEP IT SHORT. 2-4 paragraphs max. People want answers, not essays.\n"
-        "6. No bullet points, headings, or markdown. Write in plain paragraphs.\n"
-        "7. Never start with 'Here is...' or 'Based on...'. Just say the answer.\n"
+        "You are a Delhi local. Answer like you're talking to a neighbour.\n\n"
+        "RULES:\n"
+        "- Sound human. Short sentences. No robotic phrases.\n"
+        "- NO markdown. NO bullet points. NO headings. NO bold. Write plain sentences only.\n"
+        "- Start with the answer. Be direct.\n"
+        "- Use details from the context. Cite as [1], [2].\n"
+        "- Keep it 2-4 short paragraphs.\n"
+        "- Never make things up.\n"
+        "- Never say 'Here is...' or 'Based on...'\n"
     )
     if authority:
         system_prompt = base_prompt + (
-            "7. You have an authority match below. Mention it naturally — "
-            "'This is handled by...', 'You need to contact...' — "
-            "don't announce it like a database record.\n"
+            "- Mention the authority naturally: 'This is handled by...', "
+            "'You need to contact...'\n"
         )
     else:
         system_prompt = base_prompt + (
-            "7. There's no specific authority match for this, so just answer "
-            "based on the background info. Don't invent one.\n"
+            "- No authority match. Just answer from the background info.\n"
         )
 
     authority_block = ""
@@ -322,14 +312,19 @@ def answer_node(state: AgentState) -> AgentState:
 ## SOURCES:
 {sources_list if sources_list else '(none)'}
 
-Answer naturally. If there's live data, start with it. If there's an authority, "
-"tell them who to contact and how. Use the background info to add useful details. "
-"Write like you're talking to someone, not writing a report."""
+Answer in plain sentences. No markdown. No bullet points. No headings. "
+"If there's live data, start with it. If there's an authority, "
+"tell them who to contact. Write like you're talking to someone, "
+"not writing a report."""
 
     llm_response = call_llm(prompt=prompt, system_prompt=system_prompt)
 
     if llm_response:
         answer = llm_response.strip()
+        # Strip any markdown the LLM sneaks in despite instructions
+        answer = re.sub(r'###?\s*', '', answer)
+        answer = re.sub(r'\*\*([^*]+)\*\*', r'\1', answer)
+        answer = re.sub(r'^[-*+]\s+', '', answer, flags=re.MULTILINE)
     elif live_data:
         aqi = live_data.get('aqi', 'N/A')
         pol = live_data.get('dominant_pollutant', 'unknown')
