@@ -22,9 +22,10 @@ app = FastAPI(
     description=(
         "LangGraph agent for Delhi civic issues: classifies intent, routes to the "
         "correct authority with a cited source, asks for clarification instead of "
-        "guessing when confidence is low, and drafts complaints on request."
+        "guessing when confidence is low, retries with reformulated queries, calls "
+        "live AQI data, and drafts complaints on request."
     ),
-    version="3.0.0",
+    version="3.1.0",
 )
 
 app.add_middleware(
@@ -53,6 +54,10 @@ class CivicResponse(BaseModel):
     needs_clarification: bool = False
     clarifying_question: str | None = None
     complaint_draft: str | None = None
+    used_reformulation: bool = False
+    original_query: str = ""
+    reformulated_query: str | None = None
+    live_data: dict | None = None
 
 
 @app.get("/")
@@ -80,6 +85,10 @@ async def civic_ask(req: CivicQuery):
         needs_clarification=result.get("needs_clarification", False),
         clarifying_question=result.get("clarifying_question"),
         complaint_draft=result.get("complaint_draft"),
+        used_reformulation=bool(result.get("used_reformulation")),
+        original_query=result.get("original_query", req.query),
+        reformulated_query=result.get("reformulated_query"),
+        live_data=result.get("live_data"),
     )
 
 
@@ -93,9 +102,10 @@ async def get_sources():
 async def health():
     return {
         "status": "ok",
-        "agent": "Delhi Civic Sense Navigator v3 (LangGraph)",
+        "agent": "Delhi Civic Sense Navigator v3.1 (LangGraph + live AQI + query reformulation)",
         "timestamp": datetime.now().isoformat(),
         "llm_configured": bool(os.getenv("GROQ_API_KEY")),
+        "waqi_configured": bool(os.getenv("WAQI_API_TOKEN")),
     }
 
 

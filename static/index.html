@@ -36,6 +36,21 @@
   .confidence-high::before { content: "\2713"; font-weight: 700; }
   .confidence-low::before { content: "\26A0"; font-weight: 700; }
 
+  /* ---------- Reformulation note ---------- */
+  .reform-note { background: #f0f4ff; border: 1px solid #bfd4f5; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #1e40af; display: flex; align-items: flex-start; gap: 8px; }
+  .reform-note .icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .reform-note .reform-query { font-weight: 600; font-style: italic; }
+
+  /* ---------- Live data badge ---------- */
+  .live-data-card { background: #fff1f0; border: 1px solid #ffb8b8; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  .live-badge { display: inline-flex; align-items: center; gap: 6px; background: #dc2626; color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 10px; border-radius: 3px; margin-bottom: 8px; text-transform: uppercase; }
+  .live-badge .dot { width: 6px; height: 6px; background: #fff; border-radius: 50%; animation: live-pulse 1.5s infinite; }
+  @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .live-data-card .row { margin: 3px 0; font-size: 13px; }
+  .live-data-card .row b { color: #991b1b; }
+  .live-data-card .aqi-value { font-size: 26px; font-weight: 700; color: #dc2626; line-height: 1.2; }
+  .live-data-card .aqi-label { font-size: 11px; color: #64748b; }
+
   /* ---------- Authority card ---------- */
   .authority-card { background: #f0f7ff; border: 1px solid #b8d4f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
   .authority-card .badge { display: inline-block; background: #0a2e5c; color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 10px; border-radius: 3px; margin-bottom: 8px; text-transform: uppercase; }
@@ -128,7 +143,7 @@
       <span class="emblem-icon">&#9733;</span>
       <div>
         <h1>Delhi Civic Sense Navigator</h1>
-        <div class="subtitle">Government of NCT of Delhi — Official Sources</div>
+        <div class="subtitle">Government of NCT of Delhi — Official Sources + Live Data</div>
       </div>
     </div>
   </div>
@@ -143,14 +158,14 @@
     <button onclick="ask('What are the new Solid Waste Management Rules 2026?')">SWM Rules 2026</button>
     <button onclick="ask('How do I report a pothole or garbage in Delhi?')">Report Issues</button>
     <button onclick="ask('What helplines exist for water, electricity, and emergencies in Delhi?')">Helplines</button>
-    <button onclick="ask('What is being done about Delhi air pollution?')">Air Pollution</button>
+    <button onclick="ask('What is the AQI in Delhi right now?')">Live AQI</button>
     <button onclick="ask('Tell me about MCD waste management in Delhi')">MCD Waste Mgmt</button>
     <button onclick="ask('Garbage hasn\'t been collected on my street for 3 days in Rohini, please help me report it')">Report Garbage</button>
   </div>
 
   <div class="chat-area" id="chatArea">
     <div class="message bot-msg">
-      <div class="answer">Namaste! I'm the Delhi Civic Sense Navigator. Ask me about waste management, air pollution, helplines, reporting civic issues, or any Delhi civic matter. I answer using official government sources with citations.</div>
+      <div class="answer">Namaste! I'm the Delhi Civic Sense Navigator. Ask me about waste management, air pollution, helplines, reporting civic issues, or any Delhi civic matter. I answer using official government sources with citations, and can fetch live AQI data in real time.</div>
     </div>
   </div>
 
@@ -160,6 +175,7 @@
   </div>
   <div class="footer-info">
     Data sourced from MCD, Delhi Government, PIB, DPCC, and other official sources.
+    Live AQI via waqi.info.
     <a href="/api/sources">View all sources</a>
   </div>
 </div>
@@ -208,12 +224,33 @@ function addBotMessage(data) {
     html += '<div class="confidence-badge confidence-high">Routed with source</div>';
   }
 
+  // --- Retry note (when reformulation happened) ---
+  if (data.used_reformulation && data.reformulated_query) {
+    html += `<div class="reform-note">
+      <span class="icon">&#8635;</span>
+      <div>First search wasn't specific enough — retried as: <span class="reform-query">${escapeHtml(data.reformulated_query)}</span></div>
+    </div>`;
+  }
+
   // --- Zone 2a: Clarifying question (if low confidence) ---
   if (data.needs_clarification && data.clarifying_question) {
     html += `<div class="clarify-box">${escapeHtml(data.clarifying_question)}</div>`;
   }
 
-  // --- Zone 2b: Authority match card ---
+  // --- Zone 2b: Live data card (if present) ---
+  if (data.live_data) {
+    const ld = data.live_data;
+    html += `<div class="live-data-card">
+      <div class="live-badge"><span class="dot"></span>LIVE</div>
+      <div class="row"><span class="aqi-value">${escapeHtml(String(ld.aqi))}</span> <span class="aqi-label">AQI</span></div>
+      <div class="row"><b>Dominant Pollutant:</b> ${escapeHtml(ld.dominant_pollutant || 'N/A')}</div>
+      <div class="row"><b>Station:</b> ${escapeHtml(ld.station || 'N/A')}</div>
+      <div class="row"><b>Reported:</b> ${escapeHtml(ld.timestamp || 'N/A')}</div>
+      <div class="row" style="font-size:11px;color:#64748b;margin-top:4px;">Source: <a href="${ld.source_url}" target="_blank" rel="noopener">waqi.info</a></div>
+    </div>`;
+  }
+
+  // --- Zone 2c: Authority match card ---
   if (data.authority) {
     const a = data.authority;
     html += `<div class="authority-card">
@@ -226,7 +263,7 @@ function addBotMessage(data) {
     </div>`;
   }
 
-  // --- Zone 2c: Prose answer ---
+  // --- Zone 2d: Prose answer ---
   const answerHtml = data.answer.replace(/\[(\d+)\]/g, '<sup>$1</sup>');
   html += `<div class="answer">${answerHtml}</div>`;
 
@@ -244,13 +281,14 @@ function addBotMessage(data) {
   }
 
   // --- Zone 4: Why this answer (expandable) ---
-  const whyId = 'why_' + Date.now();
   html += `<div class="why-toggle">
     <details>
       <summary>Why this answer</summary>
       <div class="why-content">
         <span class="stat"><b>Issue type:</b> ${data.issue_type ? escapeHtml(data.issue_type) : '—'}</span>
         <span class="stat"><b>Chunks retrieved:</b> ${data.chunks_retrieved ?? 0}</span>
+        ${data.used_reformulation ? `<span class="stat"><b>Reformulated:</b> yes</span>` : ''}
+        ${data.live_data ? `<span class="stat"><b>Live data:</b> AQI ${data.live_data.aqi}</span>` : ''}
         ${data.citations && data.citations.length > 0 ? `
         <div><b>Citations:</b></div>
         <ul class="cit-list">

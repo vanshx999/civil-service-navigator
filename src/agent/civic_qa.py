@@ -15,6 +15,31 @@ COLLECTION_NAME = "delhi_civic_sense"
 RETRIEVAL_K = 5
 
 _retriever = None
+_vectorstore = None
+
+
+def _get_vectorstore():
+    global _vectorstore
+    if _vectorstore is not None:
+        return _vectorstore
+    if not os.path.exists(CHROMA_DIR):
+        logger.warning(f"ChromaDB not found at {CHROMA_DIR}")
+        return None
+    try:
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+        _vectorstore = Chroma(
+            collection_name=COLLECTION_NAME,
+            embedding_function=embeddings,
+            persist_directory=CHROMA_DIR,
+        )
+        return _vectorstore
+    except Exception as e:
+        logger.error(f"Vectorstore init failed: {e}")
+        return None
 
 
 def _get_retriever():
@@ -25,16 +50,9 @@ def _get_retriever():
         logger.warning(f"ChromaDB not found at {CHROMA_DIR}")
         return None
     try:
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True},
-        )
-        vectorstore = Chroma(
-            collection_name=COLLECTION_NAME,
-            embedding_function=embeddings,
-            persist_directory=CHROMA_DIR,
-        )
+        vectorstore = _get_vectorstore()
+        if vectorstore is None:
+            return None
         _retriever = vectorstore.as_retriever(
             search_type="similarity",
             search_kwargs={"k": RETRIEVAL_K},

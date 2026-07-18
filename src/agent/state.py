@@ -23,10 +23,18 @@ class AgentState(TypedDict, total=False):
     confidence: str                    # "high" | "low"
     needs_clarification: bool
     clarifying_question: Optional[str]
+    low_confidence_reason: Optional[str]  # "off_topic" | "insufficient_context" | None
+    retry_count: int                   # how many times we have reformulated & re-retrieved
+    original_query: str                # preserved so the UI can show what the user typed
+    used_reformulation: bool           # true if we actually went through the retry path
+    reformulated_query: Optional[str]  # the reformulated version, if retry happened
 
     # answer_node output
     authority: Optional[dict]          # deterministic routing match, if any (with citation)
     answer: str
+
+    # fetch_live_data_node output
+    live_data: Optional[dict]          # e.g. {"aqi": 142, "dominant_pollutant": "pm2.5", ...}
 
     # complaint_draft_node output
     complaint_draft: Optional[str]

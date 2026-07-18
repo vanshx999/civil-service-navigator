@@ -5,6 +5,7 @@ from src.agent import civic_qa
 from src.agent.authority_map import resolve_authority
 from src.agent.llm import call_llm, call_llm_structured
 from src.agent.state import AgentState
+from src.agent.tools import fetch_live_aqi
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ def classify_node(state: AgentState) -> AgentState:
         "location_hint": result.get("location_hint"),
         "is_civic_related": bool(result.get("is_civic_related", True)),
         "wants_complaint_draft": bool(result.get("wants_complaint_draft", False)),
+        "original_query": state.get("original_query", query),
     }
 
 
@@ -87,16 +89,22 @@ def classify_node(state: AgentState) -> AgentState:
 # 2. retrieve_node — RAG over the ingested, cited documents (reuses civic_qa).
 # ---------------------------------------------------------------------------
 
+DISTANCE_THRESHOLD = 1.0  # cosine distance; lower = more similar
+
+
 def retrieve_node(state: AgentState) -> AgentState:
-    retriever = civic_qa._get_retriever()
-    if retriever is None:
+    vectorstore = civic_qa._get_vectorstore()
+    if vectorstore is None:
         return {**state, "docs": [], "citations": [], "chunks_retrieved": 0}
 
     try:
-        docs = retriever.invoke(state["query"])
+        scored = vectorstore.similarity_search_with_score(state["query"], k=5)
     except Exception as e:
         logger.error(f"retrieve_node: retrieval failed: {e}")
-        docs = []
+        return {**state, "docs": [], "citations": [], "chunks_retrieved": 0}
+
+    # Filter by distance threshold so low-relevance results don't count
+    docs = [doc for doc, score in scored if score < DISTANCE_THRESHOLD]
 
     context_text, citations = civic_qa.format_context(docs) if docs else ("", [])
     return {
@@ -104,12 +112,21 @@ def retrieve_node(state: AgentState) -> AgentState:
         "docs": docs,
         "citations": citations,
         "chunks_retrieved": len(docs),
-        "_context_text": context_text,  # not part of typed state, just threaded through
+        "_context_text": context_text,
     }
 
 
 # ---------------------------------------------------------------------------
-# 3. confidence_gate_node — decide whether we actually know enough to answer.
+# 3. fetch_live_data_node — live AQI call (only for air_pollution).
+# ---------------------------------------------------------------------------
+
+def fetch_live_data_node(state: AgentState) -> AgentState:
+    live = fetch_live_aqi()
+    return {**state, "live_data": live}
+
+
+# ---------------------------------------------------------------------------
+# 4. confidence_gate_node — decide whether we actually know enough to answer.
 # ---------------------------------------------------------------------------
 
 def confidence_gate_node(state: AgentState) -> AgentState:
@@ -129,6 +146,7 @@ def confidence_gate_node(state: AgentState) -> AgentState:
                 "Could you rephrase your question around one of those?"
             ),
             "authority": None,
+            "low_confidence_reason": "off_topic",
         }
 
     # If we have neither a deterministic authority match nor any retrieved context,
@@ -144,6 +162,7 @@ def confidence_gate_node(state: AgentState) -> AgentState:
                 "streetlights, or air pollution in Delhi?"
             ),
             "authority": None,
+            "low_confidence_reason": "insufficient_context",
         }
 
     return {
@@ -152,11 +171,75 @@ def confidence_gate_node(state: AgentState) -> AgentState:
         "needs_clarification": False,
         "clarifying_question": None,
         "authority": authority,
+        "low_confidence_reason": None,
     }
 
 
 # ---------------------------------------------------------------------------
-# 4. answer_node — either return the clarifying question, or produce a grounded answer.
+# 5. reformulate_query_node — retry with a better query when retrieval was empty.
+# ---------------------------------------------------------------------------
+
+REFORMULATE_SYSTEM_PROMPT = (
+    "Rewrite this citizen's civic query into a more specific search query likely to "
+    "match official Delhi government documents about waste management, roads, water, "
+    "air pollution, or civic helplines. Output ONLY the rewritten query, no explanation."
+)
+
+_KEYWORD_EXPANSIONS = {
+    "SWM": "Solid Waste Management",
+    "AQI": "Air Quality Index",
+    "MCD": "MCD Municipal Corporation of Delhi",
+    "DJ": "Delhi Jal Board",
+    "DPCC": "Delhi Pollution Control Committee",
+    "PWD": "Public Works Department",
+    "NDMC": "New Delhi Municipal Council",
+    "CAQM": "Commission for Air Quality Management",
+    "CPCB": "Central Pollution Control Board",
+    "RWA": "Resident Welfare Association",
+    "BWG": "bulk waste generator",
+    "EBWGR": "Extended Bulk Waste Generator Responsibility",
+    "WTE": "Waste to Energy",
+    "MRF": "Material Recovery Facility",
+    "RDF": "Refuse Derived Fuel",
+    "NGT": "National Green Tribunal",
+    "IEC": "Information Education Communication",
+    "EV": "electric vehicle",
+}
+
+
+def _keyword_expand(query: str) -> str:
+    expanded = query
+    for abbr, full in _KEYWORD_EXPANSIONS.items():
+        expanded = re.sub(rf"\b{abbr}\b", full, expanded, flags=re.I)
+    return expanded + " Delhi MCD official"
+
+
+def reformulate_query_node(state: AgentState) -> AgentState:
+    original_query = state.get("original_query", state["query"])
+    current_query = state["query"]
+
+    llm_response = call_llm(
+        prompt=f"Original query: {original_query}",
+        system_prompt=REFORMULATE_SYSTEM_PROMPT,
+    )
+
+    if llm_response:
+        reformulated = llm_response.strip().strip('"\'')
+    else:
+        reformulated = _keyword_expand(current_query)
+
+    logger.info(f"reformulate_query_node: '{current_query[:60]}' -> '{reformulated[:60]}'")
+    return {
+        **state,
+        "query": reformulated,
+        "reformulated_query": reformulated,
+        "retry_count": state.get("retry_count", 0) + 1,
+        "used_reformulation": True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 6. answer_node — either return the clarifying question, or produce a grounded answer.
 # ---------------------------------------------------------------------------
 
 def answer_node(state: AgentState) -> AgentState:
@@ -166,11 +249,13 @@ def answer_node(state: AgentState) -> AgentState:
     authority = state.get("authority")
     context_text = state.get("_context_text", "")
     citations = state.get("citations", [])
+    live_data = state.get("live_data")
 
     # Build system prompt dynamically to avoid mentioning "authority match" when none exists
     base_prompt = (
         "You are the Delhi Civic Sense Navigator, an assistant that answers "
-        "questions about civic issues in Delhi, India, using ONLY the retrieved context provided.\n\n"
+        "questions about civic issues in Delhi, India, using ONLY the retrieved context "
+        "and any live data provided.\n\n"
         "Rules:\n"
         "1. Answer strictly from the retrieved context below. Extract EVERY specific fact, "
         "number, name, helpline, date, and rule mentioned in the context that's relevant.\n"
@@ -199,11 +284,24 @@ def answer_node(state: AgentState) -> AgentState:
             + (f"- Portal: {authority['portal']}\n" if authority.get("portal") else "")
         )
 
+    # Live data block — prepended prominently if present
+    live_data_block = ""
+    if live_data:
+        live_data_block = (
+            "LIVE DATA (fetched just now, not from static documents): "
+            f"Delhi AQI is {live_data.get('aqi', 'N/A')} "
+            f"({live_data.get('dominant_pollutant', 'unknown')} dominant), "
+            f"reported at {live_data.get('timestamp', 'unknown time')} "
+            f"by station '{live_data.get('station', 'unknown')}'. "
+            "Source: waqi.info (World Air Quality Index project, aggregating "
+            "CPCB/DPCC monitoring stations).\n\n"
+        )
+
     sources_list = "\n".join(f'[{c["id"]}] {c["source"]}: {c["url"]}' for c in citations)
     prompt = f"""## User Question:
 {state['query']}
 
-{authority_block}
+{live_data_block}{authority_block}
 
 ## Retrieved Context:
 {context_text if context_text else '(no additional background retrieved)'}
@@ -211,15 +309,23 @@ def answer_node(state: AgentState) -> AgentState:
 ## SOURCES:
 {sources_list if sources_list else '(none)'}
 
-Answer the question. If an AUTHORITY MATCH is given, state it clearly first, then add
-any useful background from the retrieved context with inline citations like [1]."""
+Answer the question. If LIVE DATA is present, lead with it first, then add
+any useful background from the retrieved context with inline citations like [1].
+If an AUTHORITY MATCH is given, state it clearly after any live data."""
 
     llm_response = call_llm(prompt=prompt, system_prompt=system_prompt)
 
     if llm_response:
         answer = llm_response.strip()
+    elif live_data:
+        # deterministic fallback surfacing live data
+        answer = (
+            f"Current Delhi AQI: {live_data.get('aqi', 'N/A')} "
+            f"({live_data.get('dominant_pollutant', 'unknown')}), "
+            f"as of {live_data.get('timestamp', 'unknown time')}. "
+            f"Source: waqi.info — {live_data.get('source_url', '')}"
+        )
     elif authority:
-        # deterministic fallback if no LLM key is configured
         answer = (
             f"This falls under **{authority['authority']}**.\n\n"
             f"How to report: {authority['channel']}\n"
@@ -238,7 +344,7 @@ any useful background from the retrieved context with inline citations like [1].
 
 
 # ---------------------------------------------------------------------------
-# 5. complaint_draft_node — only runs if the user actually wants to file something.
+# 7. complaint_draft_node — only runs if the user actually wants to file something.
 # ---------------------------------------------------------------------------
 
 DRAFT_SYSTEM_PROMPT = """Write a short, polite, factual civic complaint (max 120 words)

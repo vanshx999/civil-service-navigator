@@ -9,22 +9,48 @@ complaint on request — instead of just answering questions from a vector index
 The pipeline makes decisions, not just retrieval + one LLM call:
 
 ```
-classify → retrieve → confidence_gate → answer → complaint_draft
+classify → [fetch_live_data if air_pollution] → retrieve → confidence_gate
+    └─[insufficient_context & retry==0]→ reformulate → retrieve → confidence_gate
+    └─[off_topic]───────────────────────→ answer (clarifying Q) → END
+    └─[high confidence]─────────────────→ answer → complaint_draft → END
 ```
 
 - **classify** — extracts issue type, location hint, and whether the user wants a
   complaint drafted, before touching the knowledge base.
+- **fetch_live_data** — only for air pollution queries; calls the WAQI API for
+  real-time Delhi AQI. Falls back gracefully to static DPCC/PIB docs if the API
+  token is missing or the call fails.
 - **retrieve** — RAG over ingested, dated, sourced documents (see below).
 - **confidence_gate** — if the query is off-topic, or there's neither a deterministic
   authority match nor any retrieved context, the agent **asks a clarifying question
   instead of guessing an answer.**
-- **answer** — leads with a deterministic, cited authority match (`src/agent/authority_map.py`)
-  when one exists, then adds retrieved background with inline citations.
+- **reformulate** — when the first retrieval returned no results, the agent rewrites
+  the query and tries again (capped at one retry to prevent infinite loops).
+- **answer** — leads with live data (AQI) when present, then a deterministic, cited
+  authority match (`src/agent/authority_map.py`) when one exists, then adds retrieved
+  background with inline citations.
 - **complaint_draft** — only runs if the user is actually reporting a problem; drafts
   a short, submittable complaint using only facts the user provided.
 
 Built with LangGraph (`src/agent/graph.py`) as a real state machine with conditional
-branching — see `src/agent/nodes.py` for each node's logic.
+branching and loops — see `src/agent/nodes.py` for each node's logic.
+
+## Live data (real-time AQI)
+
+When a user asks about air quality in Delhi, the agent calls the
+[World Air Quality Index](https://waqi.info/) API to fetch the current AQI value,
+dominant pollutant, and reporting station. This data is fetched live — it is not
+from the static document index.
+
+- **What it calls**: `https://api.waqi.info/feed/delhi/?token={WAQI_API_TOKEN}`
+- **What happens if the token is missing or the call fails**: The agent silently
+  falls back to the static DPCC/PIB documents already in the vector index. The
+  query succeeds either way — the live call is a bonus, not a dependency.
+- **Why this matters**: This demonstrates real-time tool use rather than only static
+  RAG. The "LIVE" badge in the UI makes it visually distinct from cited sources.
+
+Set `WAQI_API_TOKEN` in your environment (get a free token at
+https://aqicn.org/api/).
 
 ## Data sources & credit
 
@@ -56,6 +82,10 @@ The full list with URLs is served live at `GET /api/sources`.
   issue types (garbage, potholes, streetlights, water, drainage, air pollution,
   emergencies) — anything outside that list falls back to RAG-only, cited, best-effort
   answers, or a clarifying question if there isn't enough retrieved context.
+- **Query reformulation is capped to one retry** to prevent infinite loops. If the
+  reformulated query also returns nothing, the agent will ask a clarifying question.
+- **Live AQI data** requires a free WAQI API token. Without it, the agent gracefully
+  falls back to static DPCC/PIB documentation.
 
 ## Running it
 
