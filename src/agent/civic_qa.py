@@ -231,11 +231,14 @@ def list_sources() -> list[dict]:
         return []
     try:
         if _use_es:
+            from src.agent.config import settings
+            index_name = settings.ES_INDEX_NAME or "delhi_civic_docs"
             es = es_store.get_es_store()
             if es is None:
                 return []
+            index = getattr(es, "index_name", index_name)
             resp = es.client.search(
-                index=es.index_name,
+                index=index,
                 body={"size": 0, "aggs": {"sources": {"terms": {"field": "metadata.source.keyword", "size": 50}}}},
             )
             buckets = resp.get("aggregations", {}).get("sources", {}).get("buckets", [])
